@@ -13,6 +13,7 @@ namespace XrayUI.Services
     {
         private const string Endpoint = "https://api.cloudflare.com/client/v4/graphql";
         private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(20) };
+        private static readonly TimeSpan RequestTimeout = TimeSpan.FromSeconds(20);
 
         private const string Query = """
             query Viewer($act: string, $start: String, $end: String) {
@@ -54,17 +55,21 @@ namespace XrayUI.Services
 
             try
             {
-                using var response = await Http.SendAsync(request, cancellationToken).ConfigureAwait(false);
-                var content = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                timeout.CancelAfter(RequestTimeout);
+                using var response = await Http.SendAsync(request, timeout.Token).ConfigureAwait(false);
+                var content = await response.Content.ReadAsStringAsync(timeout.Token).ConfigureAwait(false);
                 if (!response.IsSuccessStatusCode)
                     return Failure($"Cloudflare API 返回 {(int)response.StatusCode}");
 
                 using var document = JsonDocument.Parse(content);
-                if (document.RootElement.TryGetProperty("errors", out var errors) && errors.GetArrayLength() > 0)
+                if (document.RootElement.TryGetProperty("errors", out var errors)
+                    && errors.ValueKind == JsonValueKind.Array
+                    && errors.GetArrayLength() > 0)
                     return Failure(errors[0].GetProperty("message").GetString() ?? "GraphQL 查询失败");
 
                 var accounts = document.RootElement.GetProperty("data").GetProperty("viewer").GetProperty("accounts");
-                if (accounts.GetArrayLength() == 0)
+                if (accounts.ValueKind != JsonValueKind.Array || accounts.GetArrayLength() == 0)
                     return Failure("API 未返回该账号，请检查 Account ID 和 Token 权限");
 
                 var accountData = accounts[0];
@@ -80,6 +85,10 @@ namespace XrayUI.Services
             {
                 throw;
             }
+            catch (OperationCanceledException)
+            {
+                return Failure("Cloudflare API 请求超时");
+            }
             catch (Exception ex)
             {
                 return Failure(ex.Message);
@@ -89,7 +98,12 @@ namespace XrayUI.Services
         private static long SumRequests(JsonElement account, string propertyName)
         {
             long total = 0;
-            if (!account.TryGetProperty(propertyName, out var groups)) return 0;
+            if (!account.TryGetProperty(propertyName, out var groups)
+                || groups.ValueKind != JsonValueKind.Array)
+            {
+                return 0;
+            }
+
             foreach (var group in groups.EnumerateArray())
             {
                 if (group.TryGetProperty("sum", out var sum)

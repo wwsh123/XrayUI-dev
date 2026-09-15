@@ -127,8 +127,10 @@ namespace XrayUI.ViewModels
             try
             {
                 RebuildSnapshots();
-                for (var i = 0; i < Accounts.Count; i++)
-                    Snapshots[i] = await _service.QueryAsync(Accounts[i]);
+                var accounts = Accounts.ToArray();
+                var results = await Task.WhenAll(accounts.Select(account => _service.QueryAsync(account)));
+                for (var i = 0; i < results.Length; i++)
+                    Snapshots[i] = results[i];
                 UpdateRows();
                 var failures = Snapshots.Count(x => x is { IsSuccess: false });
                 var overLimit = Snapshots.Any(x => x is { IsSuccess: true } && x.TotalRequests >= DailyLimit);
