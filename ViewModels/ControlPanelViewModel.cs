@@ -74,9 +74,12 @@ namespace XrayUI.ViewModels
         public event EventHandler? ShowPersonalizeRequested;
         public event EventHandler? ShowAppSettingsRequested;
         public event EventHandler? ShowTrafficRequested;
+        public event EventHandler? ShowCloudflareRequested;
 
         [RelayCommand]
         private void ShowTraffic() => ShowTrafficRequested?.Invoke(this, EventArgs.Empty);
+        [RelayCommand]
+        private void ShowCloudflare() => ShowCloudflareRequested?.Invoke(this, EventArgs.Empty);
         public event EventHandler<CustomRulesViewModel>? ShowCustomRulesRequested;
 
         public ControlPanelViewModel(

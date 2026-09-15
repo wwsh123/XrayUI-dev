@@ -305,6 +305,7 @@ namespace XrayUI
             ControlPanel?.CloseLogWindow();
             ControlPanel?.CloseCustomRulesWindow();
             ControlPanel?.CloseProxyStatusWindow();
+            ControlPanel?.CloseCloudflareWindow();
 
             AppWindow.IsShownInSwitchers = false;
             AppWindow.Hide();
@@ -580,7 +581,9 @@ namespace XrayUI
 
         private void OnClosed(object sender, WindowEventArgs args)
         {
+            ControlPanel?.CloseCloudflareWindow();
             ViewModel.StopSubscriptionRefreshScheduler();
+            ViewModel.Cloudflare.StopScheduler();
             ViewModel.PropertyChanged -= OnViewModelPropertyChanged;
             _rootElement.ActualThemeChanged -= OnRootElementActualThemeChanged;
             _windowMessageMonitor.WindowMessageReceived -= OnWindowMessageReceived;
@@ -744,6 +747,7 @@ namespace XrayUI
         {
             ViewModel.PersistProxyRunningStateOnExit();
             ViewModel.StopSubscriptionRefreshScheduler();
+            ViewModel.Cloudflare.StopScheduler();
             ViewModel.StopTrafficCollection();
             ViewModel.ControlPanel.XrayService.StopForShutdown();
             ViewModel.ControlPanel.CleanupTunOnExit(fastShutdown);
