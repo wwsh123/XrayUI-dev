@@ -115,7 +115,7 @@ namespace XrayUI.Services
         public async Task SaveSettingsAsync(AppSettings settings)
         {
             _cachedSettings = settings;
-            var json = JsonSerializer.Serialize(settings, AppJsonSerializerContext.Readable<AppSettings>());
+            var json = JsonSerializer.Serialize(settings, AppJsonSerializerContext.Default.AppSettings);
             await WriteAtomicAsync(SettingsFile, json).ConfigureAwait(false);
         }
 
