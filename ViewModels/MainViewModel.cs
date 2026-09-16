@@ -28,9 +28,11 @@ namespace XrayUI.ViewModels
         private bool _showPersonalize;
         private bool _showAppSettings;
     private bool _showTraffic;
+        private bool _showCloudflare;
         private readonly HashSet<string> _geminiAutoSwitchAttempted = new(StringComparer.Ordinal);
         private bool _geminiAutoSwitchInProgress;
         public TrafficMonitorViewModel Traffic { get; } = new();
+        public CloudflareMonitorViewModel Cloudflare { get; }
 
         public ServerListViewModel   ServerList   { get; }
         public ServerDetailViewModel ServerDetail { get; }
@@ -39,12 +41,13 @@ namespace XrayUI.ViewModels
         public AppSettingsViewModel  AppSettings  { get; }
         public event EventHandler? ExitRequested;
 
-    public Visibility MainContentVisibility => (!_showPersonalize && !_showAppSettings && !_showTraffic) ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility MainContentVisibility => (!_showPersonalize && !_showAppSettings && !_showTraffic && !_showCloudflare) ? Visibility.Visible : Visibility.Collapsed;
         public Visibility PersonalizeVisibility  => _showPersonalize ? Visibility.Visible   : Visibility.Collapsed;
         public Visibility AppSettingsVisibility  => _showAppSettings ? Visibility.Visible   : Visibility.Collapsed;
     public Visibility TrafficVisibility => _showTraffic ? Visibility.Visible : Visibility.Collapsed;
-    public Visibility WorkspaceVisibility => _showTraffic ? Visibility.Collapsed : Visibility.Visible;
-    public Visibility BackButtonVisibility => (_showPersonalize || _showAppSettings || _showTraffic) ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility CloudflareVisibility => _showCloudflare ? Visibility.Visible : Visibility.Collapsed;
+    public Visibility WorkspaceVisibility => (_showTraffic || _showCloudflare) ? Visibility.Collapsed : Visibility.Visible;
+    public Visibility BackButtonVisibility => (_showPersonalize || _showAppSettings || _showTraffic || _showCloudflare) ? Visibility.Visible : Visibility.Collapsed;
         public Visibility MiniModeVisibility     => IsMiniMode       ? Visibility.Visible   : Visibility.Collapsed;
         public Visibility FullModeVisibility     => IsMiniMode       ? Visibility.Collapsed : Visibility.Visible;
 
@@ -94,9 +97,10 @@ namespace XrayUI.ViewModels
             _trafficStore = new TrafficMonitorStore(new TrafficMonitorOptions(
                 [XrayConfigConstants.MixedInboundTag, XrayConfigConstants.TunInboundTag],
                 ["proxy", "direct"]));
-            _trafficCollector = new XrayTrafficCollector(_trafficStore, XrayService.ExePath,
+            _trafficCollector = new XrayTrafficCollector(_trafficStore,
                 XrayConfigBuilder.GetStatsApiPort(new AppSettings().LocalMixedPort));
             Traffic = new TrafficMonitorViewModel(_trafficStore);
+            Cloudflare = new CloudflareMonitorViewModel(settings);
             xray.LogReceived += (_, line) => _trafficCollector.RecordLogLine(line);
             // MainViewModel is constructed on the UI thread (in MainWindow ctor before
             // InitializeComponent), so capturing the dispatcher here is safe and avoids
@@ -220,6 +224,8 @@ namespace XrayUI.ViewModels
 
             await ServerList.InitializeSubscriptionRefreshSchedulesAsync(DateTimeOffset.UtcNow);
             StartSubscriptionRefreshScheduler();
+            await Cloudflare.LoadAsync();
+            Cloudflare.StartScheduler();
 
             // Fire-and-forget background tasks. Failures here must never block
             // startup or surface as dialogs (per the auto-update failure policy).
@@ -633,6 +639,21 @@ namespace XrayUI.ViewModels
             OnPropertyChanged(nameof(WorkspaceVisibility));
         }
 
+        private void OpenCloudflare()
+        {
+            _showCloudflare = true;
+            _showPersonalize = false;
+            _showAppSettings = false;
+            _showTraffic = false;
+            OnPropertyChanged(nameof(MainContentVisibility));
+            OnPropertyChanged(nameof(PersonalizeVisibility));
+            OnPropertyChanged(nameof(AppSettingsVisibility));
+            OnPropertyChanged(nameof(TrafficVisibility));
+            OnPropertyChanged(nameof(CloudflareVisibility));
+            OnPropertyChanged(nameof(BackButtonVisibility));
+            OnPropertyChanged(nameof(WorkspaceVisibility));
+        }
+
         private void ClosePersonalize()
         {
             _showPersonalize = false;
@@ -680,6 +701,7 @@ namespace XrayUI.ViewModels
             if (_showPersonalize) ClosePersonalize();
             else if (_showAppSettings) CloseAppSettings();
             else if (_showTraffic) CloseTraffic();
+            else if (_showCloudflare) CloseCloudflare();
         }
 
         private void CloseTraffic()
@@ -687,6 +709,15 @@ namespace XrayUI.ViewModels
             _showTraffic = false;
             OnPropertyChanged(nameof(MainContentVisibility));
             OnPropertyChanged(nameof(TrafficVisibility));
+            OnPropertyChanged(nameof(WorkspaceVisibility));
+            OnPropertyChanged(nameof(BackButtonVisibility));
+        }
+
+        private void CloseCloudflare()
+        {
+            _showCloudflare = false;
+            OnPropertyChanged(nameof(MainContentVisibility));
+            OnPropertyChanged(nameof(CloudflareVisibility));
             OnPropertyChanged(nameof(WorkspaceVisibility));
             OnPropertyChanged(nameof(BackButtonVisibility));
         }

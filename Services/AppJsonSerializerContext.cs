@@ -21,6 +21,8 @@ namespace XrayUI.Services;
 [JsonSerializable(typeof(SubscriptionEntry))]
 [JsonSerializable(typeof(List<SubscriptionPresetEntry>))]
 [JsonSerializable(typeof(SubscriptionPresetEntry))]
+[JsonSerializable(typeof(List<CloudflareAccount>))]
+[JsonSerializable(typeof(CloudflareAccount))]
 [JsonSerializable(typeof(PresetSettings))]
 [JsonSerializable(typeof(GhRelease))]
 [JsonSerializable(typeof(GhAsset))]

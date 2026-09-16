@@ -12,6 +12,7 @@ namespace XrayUI.Views
         private ProxyStatusWindow? _proxyStatusWindow;
         private CustomRulesWindow? _customRulesWindow;
         private TrafficMonitorWindow? _trafficWindow;
+        private CloudflareMonitorWindow? _cloudflareWindow;
 
         public ControlPanelViewModel ViewModel { get; set; } = null!;
 
@@ -36,6 +37,7 @@ namespace XrayUI.Views
             ViewModel.ShowRuntimeRequested      += OnShowRuntimeRequested;
             ViewModel.ShowProxyStatusRequested  += OnShowProxyStatusRequested;
             ViewModel.ShowTrafficRequested      += OnShowTrafficRequested;
+            ViewModel.ShowCloudflareRequested   += OnShowCloudflareRequested;
             if ((Application.Current as App)?.Window is XrayUI.MainWindow mainWindow)
                 mainWindow.ViewModel.ServerDetail.ShowRuntimeRequested += OnShowRuntimeRequested;
             ViewModel.ShowCustomRulesRequested  += OnShowCustomRulesRequested;
@@ -47,6 +49,7 @@ namespace XrayUI.Views
             ViewModel.ShowRuntimeRequested      -= OnShowRuntimeRequested;
             ViewModel.ShowProxyStatusRequested  -= OnShowProxyStatusRequested;
             ViewModel.ShowTrafficRequested      -= OnShowTrafficRequested;
+            ViewModel.ShowCloudflareRequested   -= OnShowCloudflareRequested;
             if ((Application.Current as App)?.Window is XrayUI.MainWindow mainWindow)
                 mainWindow.ViewModel.ServerDetail.ShowRuntimeRequested -= OnShowRuntimeRequested;
             ViewModel.ShowCustomRulesRequested  -= OnShowCustomRulesRequested;
@@ -84,6 +87,16 @@ namespace XrayUI.Views
 
             _proxyStatusWindow = null;
             w.Close();
+        }
+
+        public void CloseCloudflareWindow()
+        {
+            var window = _cloudflareWindow;
+            if (window is null)
+                return;
+
+            _cloudflareWindow = null;
+            window.Close();
         }
 
         private void OnShowLogsRequested(object? sender, EventArgs e)
@@ -173,6 +186,28 @@ namespace XrayUI.Views
             {
                 Debug.WriteLine($"[Traffic] Failed to open traffic window: {ex}");
                 _trafficWindow = null;
+            }
+        }
+
+        private void OnShowCloudflareRequested(object? sender, EventArgs e)
+        {
+            try
+            {
+                if (_cloudflareWindow is null)
+                {
+                    if ((Application.Current as App)?.Window is not XrayUI.MainWindow mainWindow)
+                        return;
+
+                    _cloudflareWindow = new CloudflareMonitorWindow(mainWindow.ViewModel.Cloudflare);
+                    _cloudflareWindow.Closed += (_, _) => _cloudflareWindow = null;
+                }
+
+                _cloudflareWindow.Activate();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Cloudflare] Failed to open monitor window: {ex}");
+                _cloudflareWindow = null;
             }
         }
 

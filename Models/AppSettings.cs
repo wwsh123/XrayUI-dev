@@ -117,5 +117,11 @@ namespace XrayUI.Models
         // ── Subscriptions ─────────────────────────────────────────────────────
         /// <summary>Persisted subscription sources. Nodes derived from these carry SubscriptionId = the entry's Id.</summary>
         public List<SubscriptionEntry>? Subscriptions { get; set; }
+
+        // ── Cloudflare monitoring ────────────────────────────────────────────
+        public List<CloudflareAccount> CloudflareAccounts { get; set; } = new();
+        public int CloudflareRefreshIntervalMinutes { get; set; } = 30;
+        public long CloudflareDailyLimit { get; set; } = 100000;
+        public bool CloudflareAlertsEnabled { get; set; } = true;
     }
 }

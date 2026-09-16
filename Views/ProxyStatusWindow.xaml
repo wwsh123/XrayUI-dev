@@ -42,10 +42,10 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <StackPanel Spacing="4">
-                            <TextBlock Text="{x:Bind Name, Mode=OneWay}"
+                            <TextBlock Text="{x:Bind Name}"
                                        FontSize="15"
                                        FontWeight="SemiBold" />
-                            <TextBlock Text="{x:Bind Details, Mode=OneWay}"
+                            <TextBlock Text="{x:Bind Details}"
                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                        TextWrapping="Wrap" />
                         </StackPanel>

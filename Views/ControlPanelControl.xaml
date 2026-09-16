@@ -36,6 +36,12 @@
                     </Viewbox>
                 </Button>
 
+                <Button Padding="8" Background="Transparent" BorderBrush="Transparent"
+                        ToolTipService.ToolTip="Cloudflare 账号监控"
+                        Command="{x:Bind ViewModel.ShowCloudflareCommand}">
+                    <FontIcon Glyph="&#xE753;" FontSize="16" />
+                </Button>
+
                 <!-- 1. 模式调节 -->
                 <Button x:Name="ModeSettingsButton"
                         Background="Transparent"
