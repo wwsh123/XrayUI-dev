@@ -37,9 +37,20 @@
                 </Button>
 
                 <Button Padding="8" Background="Transparent" BorderBrush="Transparent"
-                        ToolTipService.ToolTip="Cloudflare 账号监控"
+                    ToolTipService.ToolTip="{x:Bind CloudflareViewModel.UsageIndicatorToolTip, Mode=OneWay}"
                         Command="{x:Bind ViewModel.ShowCloudflareCommand}">
-                    <FontIcon Glyph="&#xE753;" FontSize="16" />
+                    <Grid Width="28" Height="20">
+                        <FontIcon Glyph="&#xE753;" FontSize="16" HorizontalAlignment="Left" />
+                        <Ellipse Width="6" Height="6" Fill="{StaticResource StateSuccessBrush}"
+                                 HorizontalAlignment="Right" VerticalAlignment="Top"
+                                 Visibility="{x:Bind CloudflareViewModel.IsUsageGreen, Mode=OneWay}" />
+                        <Ellipse Width="6" Height="6" Fill="#F5B942"
+                                 HorizontalAlignment="Right" VerticalAlignment="Center"
+                                 Visibility="{x:Bind CloudflareViewModel.IsUsageYellow, Mode=OneWay}" />
+                        <Ellipse Width="6" Height="6" Fill="{StaticResource StateErrorBrush}"
+                                 HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                 Visibility="{x:Bind CloudflareViewModel.IsUsageRed, Mode=OneWay}" />
+                    </Grid>
                 </Button>
 
                 <!-- 1. 模式调节 -->

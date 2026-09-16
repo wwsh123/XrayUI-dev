@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using Windows.System;
 using XrayUI.Helpers;
+using XrayUI.ViewModels;
 
 namespace XrayUI.Views
 {
@@ -15,6 +16,7 @@ namespace XrayUI.Views
         private CloudflareMonitorWindow? _cloudflareWindow;
 
         public ControlPanelViewModel ViewModel { get; set; } = null!;
+        public CloudflareMonitorViewModel CloudflareViewModel { get; set; } = null!;
 
         public ControlPanelControl()
         {
