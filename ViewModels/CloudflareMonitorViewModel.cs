@@ -65,16 +65,20 @@ namespace XrayUI.ViewModels
                     return;
                 }
 
+                var name = AccountName.Trim();
+                var accountTag = AccountTag.Trim().Trim('\"', ',', ';').Trim();
+                var apiToken = ApiToken.Trim();
                 var account = SelectedAccount;
                 if (account is null)
                 {
                     account = new CloudflareAccount();
-                    Accounts.Add(account);
-                    SelectedAccount = account;
                 }
-                account.Name = AccountName.Trim();
-                account.AccountTag = AccountTag.Trim().Trim('"', ',', ';').Trim();
-                account.ApiToken = ApiToken.Trim();
+                account.Name = name;
+                account.AccountTag = accountTag;
+                account.ApiToken = apiToken;
+                if (!Accounts.Contains(account))
+                    Accounts.Add(account);
+                SelectedAccount = account;
                 AccountTag = account.AccountTag;
                 await PersistAsync();
                 RebuildSnapshots();
