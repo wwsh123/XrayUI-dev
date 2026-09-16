@@ -10,39 +10,39 @@
      <TextBlock Text="Workers 和 Pages 当日请求量" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
     </StackPanel>
     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
-          <Button Content="刷新" Command="{Binding RefreshCommand}" />
-        <ProgressRing Width="20" Height="20" IsActive="{Binding IsBusy, Mode=OneWay}" />
+          <Button Content="刷新" Command="{x:Bind ViewModel.RefreshCommand, Mode=OneWay}" />
+        <ProgressRing Width="20" Height="20" IsActive="{x:Bind ViewModel.IsBusy, Mode=OneWay}" />
     </StackPanel>
    </Grid>
 
-        <InfoBar Grid.Row="1" IsOpen="{Binding HasAlert, Mode=OneWay}"
-          Message="{Binding AlertText, Mode=OneWay}" Severity="Warning" />
+        <InfoBar Grid.Row="1" IsOpen="{x:Bind ViewModel.HasAlert, Mode=OneWay}"
+          Message="{x:Bind ViewModel.AlertText, Mode=OneWay}" Severity="Warning" />
 
    <Border Grid.Row="2" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="14">
     <Grid RowDefinitions="Auto,Auto,Auto,Auto" ColumnDefinitions="*,*,*" RowSpacing="10" ColumnSpacing="10">
-    <ComboBox Grid.ColumnSpan="3" Header="已保存账号" ItemsSource="{Binding Accounts, Mode=OneWay}"
-        SelectedItem="{Binding SelectedAccount, Mode=TwoWay}" DisplayMemberPath="Name" />
-    <TextBox Grid.Row="1" Grid.Column="0" Header="账号名称" Text="{Binding AccountName, Mode=TwoWay}" />
-    <TextBox Grid.Row="1" Grid.Column="1" Header="Account ID" Text="{Binding AccountTag, Mode=TwoWay}" />
+    <ComboBox Grid.ColumnSpan="3" Header="已保存账号" ItemsSource="{x:Bind ViewModel.Accounts, Mode=OneWay}"
+      SelectedItem="{x:Bind ViewModel.SelectedAccount, Mode=TwoWay}" DisplayMemberPath="Name" />
+    <TextBox Grid.Row="1" Grid.Column="0" Header="账号名称" Text="{x:Bind ViewModel.AccountName, Mode=TwoWay}" />
+    <TextBox Grid.Row="1" Grid.Column="1" Header="Account ID" Text="{x:Bind ViewModel.AccountTag, Mode=TwoWay}" />
      <PasswordBox x:Name="TokenBox" Grid.Row="1" Grid.Column="2" Header="API Token" PasswordChanged="TokenBox_PasswordChanged" />
      <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6">
       <Button Content="新建" Command="{x:Bind ViewModel.NewAccountCommand, Mode=OneWay}" />
       <Button Content="保存账号" Click="SaveAccountButton_Click" />
       <Button Content="删除账号" Command="{x:Bind ViewModel.RemoveAccountCommand, Mode=OneWay}" />
-      <TextBlock Text="{Binding StatusText, Mode=OneWay}" VerticalAlignment="Center"
+      <TextBlock Text="{x:Bind ViewModel.StatusText, Mode=OneWay}" VerticalAlignment="Center"
              Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
      </StackPanel>
     <StackPanel Grid.Row="3" Grid.ColumnSpan="3" Orientation="Horizontal" Spacing="12">
-      <NumberBox Header="刷新间隔（分钟）" Value="{Binding RefreshIntervalMinutes, Mode=TwoWay}" Minimum="5" Maximum="60" SpinButtonPlacementMode="Inline" Width="180" />
-      <NumberBox Header="每日提醒限额" Value="{Binding DailyLimit, Mode=TwoWay}" Minimum="1" Width="180" />
-      <CheckBox Content="启用限额/错误提醒" IsChecked="{Binding AlertsEnabled, Mode=TwoWay}" VerticalAlignment="Bottom" />
-      <Button Content="保存监控设置" Command="{Binding SaveSettingsCommand}" VerticalAlignment="Bottom" />
+      <NumberBox Header="刷新间隔（分钟）" Value="{x:Bind ViewModel.RefreshIntervalMinutes, Mode=TwoWay}" Minimum="5" Maximum="60" SpinButtonPlacementMode="Inline" Width="180" />
+      <NumberBox Header="每日提醒限额" Value="{x:Bind ViewModel.DailyLimit, Mode=TwoWay}" Minimum="1" Width="180" />
+      <CheckBox Content="启用限额/错误提醒" IsChecked="{x:Bind ViewModel.AlertsEnabled, Mode=TwoWay}" VerticalAlignment="Bottom" />
+      <Button Content="保存监控设置" Command="{x:Bind ViewModel.SaveSettingsCommand, Mode=OneWay}" VerticalAlignment="Bottom" />
      </StackPanel>
     </Grid>
    </Border>
 
-  <ListView Grid.Row="3" ItemsSource="{Binding Rows, Mode=OneWay}" SelectionMode="None">
+  <ListView Grid.Row="3" ItemsSource="{x:Bind ViewModel.Rows, Mode=OneWay}" SelectionMode="None">
     <ListView.ItemTemplate>
      <DataTemplate x:DataType="vm:CloudflareAccountStatus">
       <Border Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,0,0,8">
