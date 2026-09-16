@@ -183,7 +183,9 @@
 
                     <views:ControlPanelControl x:Name="ControlPanel"
                                                Grid.Row="1"
-                                               ViewModel="{x:Bind ViewModel.ControlPanel, Mode=OneTime}" />
+                                               ViewModel="{x:Bind ViewModel.ControlPanel, Mode=OneTime}"
+                                               CloudflareViewModel="{x:Bind ViewModel.Cloudflare, Mode=OneTime}"
+                                               TrafficViewModel="{x:Bind ViewModel.Traffic, Mode=OneTime}" />
                 </Grid>
 
                 <!-- Personalize view -->

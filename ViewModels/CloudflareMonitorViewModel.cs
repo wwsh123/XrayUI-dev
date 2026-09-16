@@ -18,6 +18,10 @@ namespace XrayUI.ViewModels
         public ObservableCollection<CloudflareAccount> Accounts { get; } = new();
         public ObservableCollection<CloudflareAccountSnapshot?> Snapshots { get; } = new();
         public ObservableCollection<CloudflareAccountStatus> Rows { get; } = new();
+        public ObservableCollection<CloudflareUsageIndicator> UsageIndicators { get; } = new();
+        public CloudflareUsageIndicator UsageIndicator1 { get; private set; } = new();
+        public CloudflareUsageIndicator UsageIndicator2 { get; private set; } = new();
+        public CloudflareUsageIndicator UsageIndicator3 { get; private set; } = new();
 
         [ObservableProperty] public partial CloudflareAccount? SelectedAccount { get; set; }
         [ObservableProperty] public partial string AccountName { get; set; } = string.Empty;
@@ -31,6 +35,12 @@ namespace XrayUI.ViewModels
         [ObservableProperty] public partial double DailyLimit { get; set; } = 100000;
         [ObservableProperty] public partial bool AlertsEnabled { get; set; } = true;
 
+        public bool HasUsageIndicator { get; private set; }
+        public bool IsUsageGreen { get; private set; }
+        public bool IsUsageYellow { get; private set; }
+        public bool IsUsageRed { get; private set; }
+        public string UsageIndicatorToolTip { get; private set; } = "Cloudflare 账号监控（未查询）";
+
         public CloudflareMonitorViewModel(SettingsService settings) => _settings = settings;
 
         partial void OnSelectedAccountChanged(CloudflareAccount? value)
@@ -40,6 +50,8 @@ namespace XrayUI.ViewModels
             AccountTag = value.AccountTag;
             ApiToken = value.ApiToken;
         }
+
+        partial void OnDailyLimitChanged(double value) => UpdateRows();
 
         public async Task LoadAsync()
         {
@@ -188,6 +200,9 @@ namespace XrayUI.ViewModels
         private void UpdateRows()
         {
             Rows.Clear();
+            UsageIndicators.Clear();
+            var usages = new System.Collections.Generic.List<(string Name, double Value)>();
+            double? highestUsage = null;
             for (var i = 0; i < Accounts.Count; i++)
             {
                 var snapshot = i < Snapshots.Count ? Snapshots[i] : null;
@@ -202,10 +217,47 @@ namespace XrayUI.ViewModels
                     row.Requests = snapshot.TotalRequests.ToString("N0");
                     row.Workers = snapshot.WorkersRequests.ToString("N0");
                     row.Pages = snapshot.PagesRequests.ToString("N0");
-                    row.Usage = $"{Math.Min(snapshot.TotalRequests * 100d / DailyLimit, 100):F1}%";
+                    var usage = snapshot.TotalRequests * 100d / DailyLimit;
+                    highestUsage = Math.Max(highestUsage ?? 0, usage);
+                    row.Usage = $"{Math.Min(usage, 100):F1}%";
+                    usages.Add((Accounts[i].Name, usage));
                 }
                 Rows.Add(row);
             }
+
+            foreach (var item in usages.OrderByDescending(x => x.Value).Take(3))
+            {
+                var usage = Math.Max(0, item.Value);
+                UsageIndicators.Add(new CloudflareUsageIndicator
+                {
+                    Name = item.Name,
+                    Usage = $"{Math.Min(usage, 100):F1}%",
+                    IsVisible = true,
+                    IsGreen = usage < 70,
+                    IsYellow = usage >= 70 && usage < 90,
+                    IsRed = usage >= 90
+                });
+            }
+            UsageIndicator1 = UsageIndicators.Count > 0 ? UsageIndicators[0] : new();
+            UsageIndicator2 = UsageIndicators.Count > 1 ? UsageIndicators[1] : new();
+            UsageIndicator3 = UsageIndicators.Count > 2 ? UsageIndicators[2] : new();
+
+            HasUsageIndicator = highestUsage.HasValue;
+            IsUsageGreen = highestUsage is < 70;
+            IsUsageYellow = highestUsage is >= 70 and < 90;
+            IsUsageRed = highestUsage is >= 90;
+            UsageIndicatorToolTip = highestUsage.HasValue
+                ? $"Cloudflare 最高占限额 {highestUsage.Value:F1}%"
+                : "Cloudflare 账号监控（未查询）";
+            OnPropertyChanged(nameof(HasUsageIndicator));
+            OnPropertyChanged(nameof(IsUsageGreen));
+            OnPropertyChanged(nameof(IsUsageYellow));
+            OnPropertyChanged(nameof(IsUsageRed));
+            OnPropertyChanged(nameof(UsageIndicatorToolTip));
+            OnPropertyChanged(nameof(UsageIndicators));
+            OnPropertyChanged(nameof(UsageIndicator1));
+            OnPropertyChanged(nameof(UsageIndicator2));
+            OnPropertyChanged(nameof(UsageIndicator3));
         }
     }
 }

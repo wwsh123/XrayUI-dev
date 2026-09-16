@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using Windows.System;
 using XrayUI.Helpers;
+using XrayUI.ViewModels;
 
 namespace XrayUI.Views
 {
@@ -13,8 +14,11 @@ namespace XrayUI.Views
         private CustomRulesWindow? _customRulesWindow;
         private TrafficMonitorWindow? _trafficWindow;
         private CloudflareMonitorWindow? _cloudflareWindow;
+        private Microsoft.UI.Dispatching.DispatcherQueueTimer? _trafficTimer;
 
         public ControlPanelViewModel ViewModel { get; set; } = null!;
+        public CloudflareMonitorViewModel CloudflareViewModel { get; set; } = null!;
+        public TrafficMonitorViewModel TrafficViewModel { get; set; } = null!;
 
         public ControlPanelControl()
         {
@@ -41,6 +45,11 @@ namespace XrayUI.Views
             if ((Application.Current as App)?.Window is XrayUI.MainWindow mainWindow)
                 mainWindow.ViewModel.ServerDetail.ShowRuntimeRequested += OnShowRuntimeRequested;
             ViewModel.ShowCustomRulesRequested  += OnShowCustomRulesRequested;
+            _trafficTimer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.CreateTimer();
+            if (_trafficTimer is null) return;
+            _trafficTimer.Interval = TimeSpan.FromMilliseconds(250);
+            _trafficTimer.Tick += OnTrafficTimerTick;
+            _trafficTimer.Start();
         }
 
         private void UserControl_Unloaded(object sender, RoutedEventArgs e)
@@ -53,6 +62,17 @@ namespace XrayUI.Views
             if ((Application.Current as App)?.Window is XrayUI.MainWindow mainWindow)
                 mainWindow.ViewModel.ServerDetail.ShowRuntimeRequested -= OnShowRuntimeRequested;
             ViewModel.ShowCustomRulesRequested  -= OnShowCustomRulesRequested;
+            if (_trafficTimer is not null)
+            {
+                _trafficTimer.Stop();
+                _trafficTimer.Tick -= OnTrafficTimerTick;
+                _trafficTimer = null;
+            }
+        }
+
+        private void OnTrafficTimerTick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+        {
+            if (TrafficViewModel.HasSource) TrafficViewModel.Refresh();
         }
 
         public void CloseLogWindow()
