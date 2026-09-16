@@ -37,20 +37,34 @@
                 </Button>
 
                 <Button Padding="8" Background="Transparent" BorderBrush="Transparent"
-                    ToolTipService.ToolTip="{x:Bind CloudflareViewModel.UsageIndicatorToolTip, Mode=OneWay}"
+                    ToolTipService.ToolTip="Cloudflare 账号监控"
                         Command="{x:Bind ViewModel.ShowCloudflareCommand}">
-                    <Grid Width="28" Height="20">
-                        <FontIcon Glyph="&#xE753;" FontSize="16" HorizontalAlignment="Left" />
-                        <Ellipse Width="6" Height="6" Fill="{StaticResource StateSuccessBrush}"
-                                 HorizontalAlignment="Right" VerticalAlignment="Top"
-                                 Visibility="{x:Bind CloudflareViewModel.IsUsageGreen, Mode=OneWay}" />
-                        <Ellipse Width="6" Height="6" Fill="#F5B942"
-                                 HorizontalAlignment="Right" VerticalAlignment="Center"
-                                 Visibility="{x:Bind CloudflareViewModel.IsUsageYellow, Mode=OneWay}" />
-                        <Ellipse Width="6" Height="6" Fill="{StaticResource StateErrorBrush}"
-                                 HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                 Visibility="{x:Bind CloudflareViewModel.IsUsageRed, Mode=OneWay}" />
-                    </Grid>
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <StackPanel Orientation="Horizontal" Spacing="2"
+                                    Visibility="{x:Bind CloudflareViewModel.UsageIndicator1.IsVisible, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                    ToolTipService.ToolTip="{x:Bind CloudflareViewModel.UsageIndicator1.ToolTip, Mode=OneWay}">
+                            <Ellipse Width="7" Height="7" Fill="{StaticResource StateSuccessBrush}" Visibility="{x:Bind CloudflareViewModel.UsageIndicator1.IsGreen, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <Ellipse Width="7" Height="7" Fill="#F5B942" Visibility="{x:Bind CloudflareViewModel.UsageIndicator1.IsYellow, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <Ellipse Width="7" Height="7" Fill="{StaticResource StateErrorBrush}" Visibility="{x:Bind CloudflareViewModel.UsageIndicator1.IsRed, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <TextBlock Text="{x:Bind CloudflareViewModel.UsageIndicator1.Usage, Mode=OneWay}" FontSize="10" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="2"
+                                    Visibility="{x:Bind CloudflareViewModel.UsageIndicator2.IsVisible, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                    ToolTipService.ToolTip="{x:Bind CloudflareViewModel.UsageIndicator2.ToolTip, Mode=OneWay}">
+                            <Ellipse Width="7" Height="7" Fill="{StaticResource StateSuccessBrush}" Visibility="{x:Bind CloudflareViewModel.UsageIndicator2.IsGreen, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <Ellipse Width="7" Height="7" Fill="#F5B942" Visibility="{x:Bind CloudflareViewModel.UsageIndicator2.IsYellow, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <Ellipse Width="7" Height="7" Fill="{StaticResource StateErrorBrush}" Visibility="{x:Bind CloudflareViewModel.UsageIndicator2.IsRed, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <TextBlock Text="{x:Bind CloudflareViewModel.UsageIndicator2.Usage, Mode=OneWay}" FontSize="10" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="2"
+                                    Visibility="{x:Bind CloudflareViewModel.UsageIndicator3.IsVisible, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}"
+                                    ToolTipService.ToolTip="{x:Bind CloudflareViewModel.UsageIndicator3.ToolTip, Mode=OneWay}">
+                            <Ellipse Width="7" Height="7" Fill="{StaticResource StateSuccessBrush}" Visibility="{x:Bind CloudflareViewModel.UsageIndicator3.IsGreen, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <Ellipse Width="7" Height="7" Fill="#F5B942" Visibility="{x:Bind CloudflareViewModel.UsageIndicator3.IsYellow, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <Ellipse Width="7" Height="7" Fill="{StaticResource StateErrorBrush}" Visibility="{x:Bind CloudflareViewModel.UsageIndicator3.IsRed, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                            <TextBlock Text="{x:Bind CloudflareViewModel.UsageIndicator3.Usage, Mode=OneWay}" FontSize="10" />
+                        </StackPanel>
+                    </StackPanel>
                 </Button>
 
                 <!-- 1. 模式调节 -->
@@ -208,6 +222,14 @@
                                   OffContent=""
                                   MinWidth="0"
                                   VerticalAlignment="Center" />
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"
+                            ToolTipService.ToolTip="实时代理速度">
+                    <TextBlock Text="下" Foreground="#168BBA" FontSize="12" VerticalAlignment="Center" />
+                    <TextBlock Text="{x:Bind TrafficViewModel.Download, Mode=OneWay}" FontSize="12" VerticalAlignment="Center" />
+                    <TextBlock Text="上" Foreground="#23865F" FontSize="12" VerticalAlignment="Center" />
+                    <TextBlock Text="{x:Bind TrafficViewModel.Upload, Mode=OneWay}" FontSize="12" VerticalAlignment="Center" />
                 </StackPanel>
 
                 <!-- TUN 模式开关 -->

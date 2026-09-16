@@ -18,6 +18,10 @@ namespace XrayUI.ViewModels
         public ObservableCollection<CloudflareAccount> Accounts { get; } = new();
         public ObservableCollection<CloudflareAccountSnapshot?> Snapshots { get; } = new();
         public ObservableCollection<CloudflareAccountStatus> Rows { get; } = new();
+        public ObservableCollection<CloudflareUsageIndicator> UsageIndicators { get; } = new();
+        public CloudflareUsageIndicator UsageIndicator1 { get; private set; } = new();
+        public CloudflareUsageIndicator UsageIndicator2 { get; private set; } = new();
+        public CloudflareUsageIndicator UsageIndicator3 { get; private set; } = new();
 
         [ObservableProperty] public partial CloudflareAccount? SelectedAccount { get; set; }
         [ObservableProperty] public partial string AccountName { get; set; } = string.Empty;
@@ -196,6 +200,8 @@ namespace XrayUI.ViewModels
         private void UpdateRows()
         {
             Rows.Clear();
+            UsageIndicators.Clear();
+            var usages = new System.Collections.Generic.List<(string Name, double Value)>();
             double? highestUsage = null;
             for (var i = 0; i < Accounts.Count; i++)
             {
@@ -214,9 +220,27 @@ namespace XrayUI.ViewModels
                     var usage = snapshot.TotalRequests * 100d / DailyLimit;
                     highestUsage = Math.Max(highestUsage ?? 0, usage);
                     row.Usage = $"{Math.Min(usage, 100):F1}%";
+                    usages.Add((Accounts[i].Name, usage));
                 }
                 Rows.Add(row);
             }
+
+            foreach (var item in usages.OrderByDescending(x => x.Value).Take(3))
+            {
+                var usage = Math.Max(0, item.Value);
+                UsageIndicators.Add(new CloudflareUsageIndicator
+                {
+                    Name = item.Name,
+                    Usage = $"{Math.Min(usage, 100):F1}%",
+                    IsVisible = true,
+                    IsGreen = usage < 70,
+                    IsYellow = usage >= 70 && usage < 90,
+                    IsRed = usage >= 90
+                });
+            }
+            UsageIndicator1 = UsageIndicators.Count > 0 ? UsageIndicators[0] : new();
+            UsageIndicator2 = UsageIndicators.Count > 1 ? UsageIndicators[1] : new();
+            UsageIndicator3 = UsageIndicators.Count > 2 ? UsageIndicators[2] : new();
 
             HasUsageIndicator = highestUsage.HasValue;
             IsUsageGreen = highestUsage is < 70;
@@ -230,6 +254,10 @@ namespace XrayUI.ViewModels
             OnPropertyChanged(nameof(IsUsageYellow));
             OnPropertyChanged(nameof(IsUsageRed));
             OnPropertyChanged(nameof(UsageIndicatorToolTip));
+            OnPropertyChanged(nameof(UsageIndicators));
+            OnPropertyChanged(nameof(UsageIndicator1));
+            OnPropertyChanged(nameof(UsageIndicator2));
+            OnPropertyChanged(nameof(UsageIndicator3));
         }
     }
 }

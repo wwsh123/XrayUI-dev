@@ -341,6 +341,12 @@ namespace XrayUI.ViewModels
         [ObservableProperty]
         public partial bool IsProxyRunning { get; set; }
 
+        [ObservableProperty]
+        [NotifyPropertyChangedFor(nameof(CanRefreshAllSubscriptions))]
+        public partial bool IsRefreshingSubscriptions { get; private set; }
+
+        public bool CanRefreshAllSubscriptions => !IsRefreshingSubscriptions;
+
         /// <summary>Set by MainViewModel: hands the running session over to the currently
         /// selected server (ControlPanel.SwitchToSelectedServerAsync). Used when a
         /// subscription refresh replaces the node that carries the live connection.</summary>
@@ -453,6 +459,13 @@ namespace XrayUI.ViewModels
                     ? Servers.FirstOrDefault(x => string.Equals(x.Id, lastId, StringComparison.Ordinal))
                     : null)
                     ?? Servers[0];
+            }
+
+            if (SelectedServer?.SubscriptionId is { Length: > 0 } subscriptionId)
+            {
+                SelectedChip = GroupChips.FirstOrDefault(chip =>
+                    chip.Kind == ServerGroupChip.ChipKind.Subscription
+                    && string.Equals(chip.SubscriptionId, subscriptionId, StringComparison.Ordinal));
             }
         }
 
@@ -1230,6 +1243,22 @@ namespace XrayUI.ViewModels
 
         [RelayCommand]
         private Task OpenSubscriptions() => ShowSubscriptionsDialogAsync(startOnManagePage: false);
+
+        [RelayCommand]
+        private async Task RefreshAllSubscriptions()
+        {
+            if (IsRefreshingSubscriptions || _knownSubscriptions.Count == 0) return;
+
+            IsRefreshingSubscriptions = true;
+            try
+            {
+                await RefreshSubscriptionsAsync(_knownSubscriptions.ToList());
+            }
+            finally
+            {
+                IsRefreshingSubscriptions = false;
+            }
+        }
 
         /// <summary>
         /// Same dialog, opened straight on the manage page. Used by entry points that name an

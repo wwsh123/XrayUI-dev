@@ -102,6 +102,15 @@
                         <TextBlock x:Uid="ServerList_DeleteText" Text="删除" />
                     </StackPanel>
                 </Button>
+                <Button x:Name="BtnRefreshSubscriptions"
+                        Command="{x:Bind ViewModel.RefreshAllSubscriptionsCommand}"
+                    IsEnabled="{x:Bind ViewModel.CanRefreshAllSubscriptions, Mode=OneWay}"
+                        Padding="12,6">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <FontIcon Glyph="&#xE895;" />
+                        <TextBlock Text="更新全部订阅" />
+                    </StackPanel>
+                </Button>
             </StackPanel>
         </StackPanel>
         <Grid Grid.Row="1"
