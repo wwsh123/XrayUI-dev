@@ -17,15 +17,14 @@ namespace XrayUI.Services
             _settings = settings;
         }
 
-        public async Task<string> ExportAsync()
+        public async Task<string> ExportJsonAsync()
         {
-            Directory.CreateDirectory(PresetPaths.Dir);
-
             var servers = await _settings.LoadServersAsync().ConfigureAwait(false);
             var settings = await _settings.LoadSettingsAsync().ConfigureAwait(false);
 
             var preset = new PresetSettings
             {
+                Servers = servers.Count > 0 ? servers.ToList() : null,
                 Subscriptions = settings.Subscriptions is { Count: > 0 }
                     ? settings.Subscriptions
                         .Select(SubscriptionPresetEntry.FromSubscription)
@@ -35,6 +34,40 @@ namespace XrayUI.Services
                     ? settings.CustomRules.ToList()
                     : null,
                 AdvancedRouting = settings.AdvancedRouting?.DeepClone() as JsonObject,
+                CloudflareAccounts = settings.CloudflareAccounts is { Count: > 0 }
+                    ? settings.CloudflareAccounts.ToList()
+                    : null,
+                Settings = CloneSettings(settings),
+            };
+
+            return JsonSerializer.Serialize(
+                preset,
+                AppJsonSerializerContext.Readable<PresetSettings>());
+        }
+
+        public async Task<string> ExportAsync()
+        {
+            Directory.CreateDirectory(PresetPaths.Dir);
+
+            var servers = await _settings.LoadServersAsync().ConfigureAwait(false);
+            var settings = await _settings.LoadSettingsAsync().ConfigureAwait(false);
+
+            var preset = new PresetSettings
+            {
+                Servers = servers.Count > 0 ? servers.ToList() : null,
+                Subscriptions = settings.Subscriptions is { Count: > 0 }
+                    ? settings.Subscriptions
+                        .Select(SubscriptionPresetEntry.FromSubscription)
+                        .ToList()
+                    : null,
+                CustomRules = settings.CustomRules is { Count: > 0 }
+                    ? settings.CustomRules.ToList()
+                    : null,
+                AdvancedRouting = settings.AdvancedRouting?.DeepClone() as JsonObject,
+                CloudflareAccounts = settings.CloudflareAccounts is { Count: > 0 }
+                    ? settings.CloudflareAccounts.ToList()
+                    : null,
+                Settings = CloneSettings(settings),
             };
 
             var serversJson = JsonSerializer.Serialize(
@@ -48,6 +81,12 @@ namespace XrayUI.Services
             await File.WriteAllTextAsync(PresetPaths.SettingsFile, settingsJson).ConfigureAwait(false);
 
             return PresetPaths.Dir;
+        }
+
+        private static AppSettings? CloneSettings(AppSettings settings)
+        {
+            var json = JsonSerializer.Serialize(settings, AppJsonSerializerContext.Default.AppSettings);
+            return JsonSerializer.Deserialize(json, AppJsonSerializerContext.Default.AppSettings);
         }
     }
 }

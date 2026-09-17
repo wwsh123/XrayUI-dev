@@ -211,6 +211,12 @@ namespace XrayUI.ViewModels
         }
 
         // ── Import / Export ────────────────────────────────────────────────────
+        public async Task<string> ExportPresetBackupAsync()
+        {
+            var exportService = new PresetExportService(_settings);
+            return await exportService.ExportJsonAsync().ConfigureAwait(false);
+        }
+
         public async Task<int> ImportServersBackupAsync(string json)
         {
             var servers = JsonSerializer.Deserialize(json, AppJsonSerializerContext.Default.ListServerEntry);
@@ -223,6 +229,16 @@ namespace XrayUI.ViewModels
                 return servers.Count;
             }
             return 0;
+        }
+
+        public async Task<int> ImportPresetBackupAsync(string json)
+        {
+            var result = await new PresetImportService(_settings).ApplyJsonAsync(json).ConfigureAwait(false);
+            if (result.ImportedServers > 0 || result.ImportedSubscriptions > 0 || result.ImportedCustomRules > 0 || result.ImportedAdvancedRouting || result.ImportedCloudflareAccounts > 0)
+            {
+                PresetImported?.Invoke(this, EventArgs.Empty);
+            }
+            return result.ImportedServers;
         }
 
         public async Task<(int Imported, int Skipped)> ImportClashConfigAsync(string yamlText)
