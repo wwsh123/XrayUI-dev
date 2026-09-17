@@ -86,16 +86,15 @@ namespace XrayUI.Views
                 var file = await savePicker.PickSaveFileAsync();
                 if (file is null) return;
 
-                var serversPath = AppPaths.ServersJson;
-                if (!File.Exists(serversPath))
+                var content = await ViewModel.ExportPresetBackupAsync();
+                if (string.IsNullOrWhiteSpace(content))
                 {
-                    ShowOperationMessage("没有可导出的节点配置", InfoBarSeverity.Warning);
+                    ShowOperationMessage("没有可导出的配置内容", InfoBarSeverity.Warning);
                     return;
                 }
 
-                var content = await File.ReadAllTextAsync(serversPath);
                 await File.WriteAllTextAsync(file.Path, content);
-                ShowOperationMessage("配置已成功导出", InfoBarSeverity.Success);
+                ShowOperationMessage("配置已成功导出（包含节点、订阅、设置与 Cloudflare 账号）", InfoBarSeverity.Success);
             }
             catch (Exception ex)
             {
@@ -118,14 +117,14 @@ namespace XrayUI.Views
                 if (file is null) return;
 
                 var json = await File.ReadAllTextAsync(file.Path);
-                var count = await ViewModel.ImportServersBackupAsync(json);
+                var count = await ViewModel.ImportPresetBackupAsync(json);
                 if (count == 0)
                 {
-                    ShowOperationMessage("文件中未找到有效的节点配置", InfoBarSeverity.Warning);
+                    ShowOperationMessage("文件中未找到有效的配置备份内容", InfoBarSeverity.Warning);
                     return;
                 }
 
-                ShowOperationMessage($"已成功导入 {count} 个节点", InfoBarSeverity.Success);
+                ShowOperationMessage($"已成功导入 {count} 个节点，并恢复订阅 / 设置 / Cloudflare 配置", InfoBarSeverity.Success);
             }
             catch (Exception ex)
             {

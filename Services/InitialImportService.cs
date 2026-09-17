@@ -66,10 +66,11 @@ namespace XrayUI.Services
                 static () => new PresetSettings(),
                 "InitialImport").ConfigureAwait(false);
 
-            var hasSubscriptions = preset.Subscriptions is { Count: > 0 };
-            var hasRules = preset.CustomRules is { Count: > 0 };
-            var hasAdvancedRouting = preset.AdvancedRouting is not null;
-            if (!hasSubscriptions && !hasRules && !hasAdvancedRouting)
+            var hasSubscriptions = preset.Subscriptions is { Count: > 0 } || preset.Settings?.Subscriptions is { Count: > 0 };
+            var hasRules = preset.CustomRules is { Count: > 0 } || preset.Settings?.CustomRules is { Count: > 0 };
+            var hasAdvancedRouting = preset.AdvancedRouting is not null || preset.Settings?.AdvancedRouting is not null;
+            var hasCloudflareAccounts = preset.CloudflareAccounts is { Count: > 0 } || preset.Settings?.CloudflareAccounts is { Count: > 0 };
+            if (!hasSubscriptions && !hasRules && !hasAdvancedRouting && !hasCloudflareAccounts)
                 return;
 
             var target = await _settings.LoadSettingsAsync().ConfigureAwait(false);
@@ -77,21 +78,37 @@ namespace XrayUI.Services
 
             if (hasSubscriptions && (target.Subscriptions?.Count ?? 0) == 0)
             {
-                target.Subscriptions = preset.Subscriptions!
-                    .Select(subscription => subscription.ToSubscription())
-                    .ToList();
+                List<SubscriptionEntry>? importedSubscriptions = null;
+                if (preset.Subscriptions is { Count: > 0 })
+                {
+                    importedSubscriptions = preset.Subscriptions
+                        .Select(subscription => subscription.ToSubscription())
+                        .ToList();
+                }
+                else if (preset.Settings?.Subscriptions is { Count: > 0 })
+                {
+                    importedSubscriptions = preset.Settings.Subscriptions;
+                }
+
+                target.Subscriptions = importedSubscriptions;
                 changed = true;
             }
 
             if (hasRules && (target.CustomRules?.Count ?? 0) == 0)
             {
-                target.CustomRules = preset.CustomRules!.ToList();
+                target.CustomRules = preset.CustomRules ?? preset.Settings?.CustomRules;
                 changed = true;
             }
 
             if (hasAdvancedRouting && target.AdvancedRouting is null)
             {
-                target.AdvancedRouting = preset.AdvancedRouting!.DeepClone() as JsonObject;
+                target.AdvancedRouting = (preset.AdvancedRouting ?? preset.Settings?.AdvancedRouting)?.DeepClone() as JsonObject;
+                changed = true;
+            }
+
+            if (hasCloudflareAccounts && target.CloudflareAccounts.Count == 0)
+            {
+                target.CloudflareAccounts = preset.CloudflareAccounts ?? preset.Settings?.CloudflareAccounts ?? new List<CloudflareAccount>();
                 changed = true;
             }
 
@@ -99,7 +116,7 @@ namespace XrayUI.Services
                 return;
 
             await _settings.SaveSettingsAsync(target).ConfigureAwait(false);
-            Debug.WriteLine("[InitialImport] Imported subscriptions/custom rules/advanced routing.");
+            Debug.WriteLine("[InitialImport] Imported subscriptions/custom rules/advanced routing/cloudflare accounts.");
         }
     }
 }
