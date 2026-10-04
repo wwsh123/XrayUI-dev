@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using System.Collections.Generic;
 using XrayUI.Helpers;
 
 namespace XrayUI.Models
@@ -22,6 +23,7 @@ namespace XrayUI.Models
             Network = "tcp";
             Path = string.Empty;
             WsHost = string.Empty;
+            Alpn = [];
             XhttpMode = string.Empty;
             XhttpExtra = string.Empty;
             Security = string.Empty;
@@ -106,6 +108,11 @@ namespace XrayUI.Models
 
         [ObservableProperty]
         public partial string WsHost { get; set; }
+
+        /// <summary>
+        /// Optional TLS ALPN values. An empty list deliberately leaves ALPN to xray's defaults.
+        /// </summary>
+        public List<string> Alpn { get; set; }
 
         /// <summary>XHTTP mode: auto | packet-up | stream-up | stream-one. Empty = xray default (auto).</summary>
         [ObservableProperty]
@@ -316,6 +323,7 @@ namespace XrayUI.Models
             Network            = source.Network;
             Path               = source.Path;
             WsHost             = source.WsHost;
+            Alpn               = [.. source.Alpn];
             XhttpMode          = source.XhttpMode;
             XhttpExtra         = source.XhttpExtra;
             AlterId            = source.AlterId;

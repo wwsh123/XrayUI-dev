@@ -160,6 +160,33 @@ namespace XrayUI.Tests
         }
 
         [Fact]
+        public void Parse_VlessXhttp_MapsCoreFieldsAndExtra()
+        {
+            var yaml = """
+                proxies:
+                  - name: vl-xhttp
+                    type: vless
+                    server: x.example.com
+                    port: 443
+                    uuid: u
+                    tls: true
+                    network: xhttp
+                    xhttp-opts:
+                      path: /xh
+                      host: cdn.example.com
+                      mode: stream-one
+                      extra: '{"xPaddingBytes":"100-200"}'
+                """;
+
+            var node = Assert.Single(ClashConfigParser.Parse(yaml).Nodes);
+            Assert.Equal("xhttp", node.Network);
+            Assert.Equal("/xh", node.Path);
+            Assert.Equal("cdn.example.com", node.WsHost);
+            Assert.Equal("stream-one", node.XhttpMode);
+            Assert.Equal("{\"xPaddingBytes\":\"100-200\"}", node.XhttpExtra);
+        }
+
+        [Fact]
         public void Parse_Hysteria2PortsAndFingerprint_BuildsUdpHopAndPin()
         {
             var yaml = """

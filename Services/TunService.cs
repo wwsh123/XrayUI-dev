@@ -230,36 +230,7 @@ public class TunService
     {
         try
         {
-            // Older versions left direct routes for these public DNS resolvers; clean
-            // them up if they happen to be there. xray no longer adds them.
-            string[] legacyDnsServers = ["223.5.5.5", "119.29.29.29"];
-
-            var batch = new List<string>
-            {
-                // 0.0.0.0/0 is what current xray adds; the /1 split-routes are residue
-                // from earlier routing schemes that may still be lying around.
-                $"netsh interface ipv4 delete route {XrayConfigConstants.TunAutoRouteV4} \"{TunInterfaceName}\" store=active",
-                $"netsh interface ipv4 delete route 0.0.0.0/1 \"{TunInterfaceName}\" store=active",
-                $"netsh interface ipv4 delete route 128.0.0.0/1 \"{TunInterfaceName}\" store=active",
-                // IPv6 default route — present only when TUN IPv6 was enabled; harmless to delete otherwise.
-                $"netsh interface ipv6 delete route {XrayConfigConstants.TunAutoRouteV6} \"{TunInterfaceName}\" store=active",
-                // Legacy route.exe form for the same /1 split-routes.
-                "route delete 0.0.0.0 mask 128.0.0.0",
-                "route delete 128.0.0.0 mask 128.0.0.0",
-            };
-
-            // serverAddress may be a host name (e.g. proxy.example.com), but Windows `route delete`
-            // does not resolve domains. Skip server-IP cleanup unless it is IPv4.
-            if (TryParseSafeIPv4Address(serverAddress, out var serverIPv4))
-            {
-                batch.Add($"netsh interface ipv4 delete route {serverIPv4}/32 \"{TunInterfaceName}\" store=active");
-                batch.Add($"route delete {serverIPv4} mask 255.255.255.255");
-            }
-
-            foreach (var dns in legacyDnsServers)
-                batch.Add($"route delete {dns} mask 255.255.255.255");
-
-            batch.AddRange(BuildDnsResetBatch());
+            var batch = TunCleanupCommands.Build(TunInterfaceName, serverAddress);
 
             RunElevatedBatch(batch);
             Debug.WriteLine("[TunService] TUN 路由兜底清理完成");
@@ -268,22 +239,6 @@ public class TunService
         {
             Debug.WriteLine($"[TunService] 清理 TUN 路由失败: {ex.Message}");
         }
-    }
-
-    private static bool TryParseSafeIPv4Address(string? value, out string address)
-    {
-        address = string.Empty;
-
-        if (string.IsNullOrWhiteSpace(value))
-            return false;
-
-        if (!IPAddress.TryParse(value, out var parsed) || parsed.AddressFamily != AddressFamily.InterNetwork)
-        {
-            return false;
-        }
-
-        address = parsed.ToString();
-        return true;
     }
 
     /// <summary>

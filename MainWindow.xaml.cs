@@ -456,7 +456,7 @@ namespace XrayUI
                         return;
                     }
 
-                    SystemProxyService.ClearProxy();
+                    ProxyOwnershipService.ClearProxy();
                     StopBackgroundServicesOnExit();
                 }
                 catch (Exception ex)
@@ -687,7 +687,7 @@ namespace XrayUI
                     }
                     else
                     {
-                        SystemProxyService.ClearProxy();
+                        ProxyOwnershipService.ClearProxy();
                         StopBackgroundServicesOnExit(fastShutdown: true);
                     }
                 }

@@ -42,7 +42,8 @@ namespace XrayUI.Services
                 ["dns"] = BuildDns(settings),
                 ["inbounds"] = BuildInbounds(settings, auxServers),
                 ["outbounds"] = BuildOutbounds(server, settings, availableServers, auxServers),
-                ["routing"] = BuildRouting(settings, auxServers)
+                ["routing"] = BuildRouting(settings, auxServers),
+                ["policy"] = BuildPolicy()
             };
 
             if (IsFakeDnsActive(settings))
@@ -67,6 +68,43 @@ namespace XrayUI.Services
         /// <summary>True when xray will be built with a fakedns pool wired to the TUN inbound.</summary>
         private static bool IsFakeDnsActive(AppSettings settings) =>
             settings.IsTunMode && settings.FakeDnsEnabled;
+
+        private static JsonObject BuildPolicy()
+        {
+            return new JsonObject
+            {
+                ["levels"] = new JsonObject
+                {
+                    ["0"] = new JsonObject
+                    {
+                        ["handshake"] = 15,
+                        ["connIdle"] = 3600,
+                        // AI coding tools (Copilot, Codex, Cline) often generate responses for
+                        // complex queries or large context windows (100k+ tokens) that take 1-3
+                        // minutes of reasoning/prefill before emitting tokens. 300s (5 minutes)
+                        // gives ample runway so long-running responses are never terminated early.
+                        ["uplinkOnly"] = 300,
+                        // Symmetric: give clients ample time to drain chunked/SSE/WebSocket streams.
+                        ["downlinkOnly"] = 300,
+                        // Allocate 1024 KB buffer pool per connection so compressed multi-hundred-KB
+                        // prompt payloads and streaming chunks transfer smoothly without write stalls.
+                        ["bufferSize"] = 1024
+                    }
+                }
+            };
+        }
+
+        private static JsonObject BuildKeepAliveSockopt()
+        {
+            return new JsonObject
+            {
+                // Send TCP keepalive probes after 15 seconds of silence so intermediate NAT routers,
+                // stateful firewalls, and cloud middleboxes do not drop the idle TCP connection
+                // during long LLM reasoning/thinking phases.
+                ["tcpKeepAliveIdle"] = 15,
+                ["tcpKeepAliveInterval"] = 10
+            };
+        }
 
         private static JsonObject BuildLog(AppSettings settings)
         {
@@ -103,13 +141,23 @@ namespace XrayUI.Services
             AddNode(list, new JsonObject
             {
                 ["tag"] = XrayConfigConstants.MixedInboundTag,
-                ["protocol"] = "socks",
+                ["protocol"] = "mixed",
                 ["listen"] = settings.AllowLanConnections ? "0.0.0.0" : "127.0.0.1",
                 ["port"] = settings.LocalMixedPort,
                 ["settings"] = new JsonObject
                 {
                     ["auth"] = "noauth",
                     ["udp"] = true
+                },
+                ["streamSettings"] = new JsonObject
+                {
+                    ["sockopt"] = BuildKeepAliveSockopt()
+                },
+                ["sniffing"] = new JsonObject
+                {
+                    ["enabled"] = true,
+                    ["destOverride"] = CreateStringArray("http", "tls", "quic"),
+                    ["routeOnly"] = true
                 }
             });
 
@@ -119,7 +167,7 @@ namespace XrayUI.Services
                 AddNode(list, new JsonObject
                 {
                     ["tag"] = $"inbound_dedicated_{aux.DedicatedPort.Value}",
-                    ["protocol"] = "socks",
+                    ["protocol"] = "mixed",
                     ["listen"] = aux.AllowDedicatedLan ? "0.0.0.0" : "127.0.0.1",
                     ["port"] = aux.DedicatedPort.Value,
                     ["settings"] = new JsonObject
@@ -127,10 +175,15 @@ namespace XrayUI.Services
                         ["auth"] = "noauth",
                         ["udp"] = true
                     },
+                    ["streamSettings"] = new JsonObject
+                    {
+                        ["sockopt"] = BuildKeepAliveSockopt()
+                    },
                     ["sniffing"] = new JsonObject
                     {
                         ["enabled"] = true,
-                        ["destOverride"] = CreateStringArray("http", "tls", "quic")
+                        ["destOverride"] = CreateStringArray("http", "tls", "quic"),
+                        ["routeOnly"] = true
                     }
                 });
             }
@@ -152,6 +205,10 @@ namespace XrayUI.Services
             if (settings.FakeDnsEnabled)
             {
                 sniffing["metadataOnly"] = false;
+            }
+            else
+            {
+                sniffing["routeOnly"] = true;
             }
 
             // IPv6 is opt-in: only when enabled do we hand the TUN a v6 gateway and hijack ::/0,
@@ -192,7 +249,7 @@ namespace XrayUI.Services
                 var (entryServer, exitServer) = ResolveChainServers(server, availableServers);
                 var proxy = BuildProxyOutbound(exitServer, ProxyOutboundTag);
                 var chainEntry = BuildProxyOutbound(entryServer, ChainEntryOutboundTag);
-                ApplyProxySettings(proxy, ChainEntryOutboundTag);
+                ApplyDialerProxy(proxy, ChainEntryOutboundTag);
                 AddNode(list, proxy);
                 AddNode(list, chainEntry);
             }
@@ -210,7 +267,7 @@ namespace XrayUI.Services
                     var proxy = BuildProxyOutbound(exitServer, auxTag);
                     var chainEntryTag = $"chain-entry-{aux.Id}";
                     var chainEntry = BuildProxyOutbound(entryServer, chainEntryTag);
-                    ApplyProxySettings(proxy, chainEntryTag);
+                    ApplyDialerProxy(proxy, chainEntryTag);
                     AddNode(list, proxy);
                     AddNode(list, chainEntry);
                 }
@@ -264,7 +321,8 @@ namespace XrayUI.Services
                 foreach (var outbound in list.OfType<JsonObject>())
                 {
                     var tag = outbound["tag"]?.GetValue<string>();
-                    if (tag is ProxyOutboundTag or DirectOutboundTag or ChainEntryOutboundTag)
+                    if (tag is ProxyOutboundTag or DirectOutboundTag or ChainEntryOutboundTag
+                        || (tag != null && (tag.StartsWith("outbound_dedicated_") || tag.StartsWith("chain-entry-"))))
                     {
                         ApplyOutboundInterface(outbound, outboundInterface);
                     }
@@ -308,21 +366,32 @@ namespace XrayUI.Services
                 throw new InvalidOperationException(L.Chain_EndpointMissing);
             }
 
-            if (entryServer.IsChain || exitServer.IsChain)
+            if (entryServer.IsChain || exitServer.IsChain || entryServer.Id == exitServer.Id)
             {
                 throw new InvalidOperationException(L.Chain_NoNesting);
             }
 
+            // dialerProxy is a transport-layer dialer. UDP/QUIC based outbounds and WireGuard
+            // do not have a compatible StreamConfig dialer path in the target core.
+            if (UsesUnsupportedChainTransport(entryServer) || UsesUnsupportedChainTransport(exitServer))
+                throw new InvalidOperationException("链式代理不支持 UDP/QUIC 或 WireGuard 节点。");
+
             return (entryServer, exitServer);
         }
 
-        private static void ApplyProxySettings(JsonObject outbound, string tag)
+        private static bool UsesUnsupportedChainTransport(ServerEntry server) =>
+            string.Equals(server.Protocol, "wireguard", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(server.Protocol, "hysteria2", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(server.Network, "udp", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(server.Network, "quic", StringComparison.OrdinalIgnoreCase);
+
+        private static void ApplyDialerProxy(JsonObject outbound, string tag)
         {
-            outbound["proxySettings"] = new JsonObject
-            {
-                ["tag"] = tag,
-                ["transportLayer"] = true
-            };
+            if (outbound["streamSettings"] is not JsonObject stream)
+                throw new InvalidOperationException("链式代理出口不支持传输层拨号。");
+            var sockopt = stream["sockopt"] as JsonObject ?? new JsonObject();
+            sockopt["dialerProxy"] = tag;
+            stream["sockopt"] = sockopt;
         }
 
         private static void ApplyOutboundInterface(JsonObject outbound, string interfaceName)
@@ -387,7 +456,8 @@ namespace XrayUI.Services
                 },
                 ["streamSettings"] = new JsonObject
                 {
-                    ["network"] = "tcp"
+                    ["network"] = "tcp",
+                    ["sockopt"] = BuildKeepAliveSockopt()
                 }
             };
 
@@ -715,9 +785,7 @@ namespace XrayUI.Services
 
         private static JsonObject BuildStreamSettings(ServerEntry server)
         {
-            var network = string.IsNullOrWhiteSpace(server.Network)
-                ? "tcp"
-                : server.Network.ToLowerInvariant();
+            var network = NormalizeNetwork(server.Network);
             var security = string.IsNullOrWhiteSpace(server.Security)
                 ? "none"
                 : server.Security.ToLowerInvariant();
@@ -725,7 +793,8 @@ namespace XrayUI.Services
             var stream = new JsonObject
             {
                 ["network"] = network,
-                ["security"] = security
+                ["security"] = security,
+                ["sockopt"] = BuildKeepAliveSockopt()
             };
 
             if (security == "tls")
@@ -742,6 +811,16 @@ namespace XrayUI.Services
                 // rather than in the shared builder that hysteria2 also goes through.
                 tlsSettings["fingerprint"] =
                     string.IsNullOrWhiteSpace(server.Fingerprint) ? "chrome" : server.Fingerprint;
+
+                var alpn = server.Alpn?.Where(value => !string.IsNullOrWhiteSpace(value))
+                    .Select(value => value.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
+                    ?? Array.Empty<string>();
+                if (alpn.Length > 0)
+                {
+                    if (network == "grpc" && !alpn.Contains("h2", StringComparer.OrdinalIgnoreCase))
+                        throw new InvalidOperationException("gRPC 传输要求 ALPN 包含 h2。");
+                    tlsSettings["alpn"] = CreateStringArray(alpn);
+                }
 
                 if (string.Equals(server.Protocol, "vless", StringComparison.OrdinalIgnoreCase)
                     && !string.IsNullOrWhiteSpace(server.EchConfigList))
@@ -801,6 +880,16 @@ namespace XrayUI.Services
                     ["serviceName"] = server.Path
                 };
             }
+            else if (network == "httpupgrade")
+            {
+                // Xray's HTTPUpgrade schema has its own host field. Supplying a duplicate
+                // headers.Host is rejected by current cores rather than being harmless.
+                stream["httpupgradeSettings"] = new JsonObject
+                {
+                    ["path"] = server.Path,
+                    ["host"] = server.WsHost
+                };
+            }
             else if (network == "xhttp")
             {
                 var settings = new JsonObject
@@ -815,7 +904,10 @@ namespace XrayUI.Services
 
                 var mode = XhttpSettings.NormalizeMode(server.XhttpMode);
 
-                if (FinalmaskJson.Parse(server.XhttpExtra) is JsonObject extra)
+                var parsedExtra = FinalmaskJson.Parse(server.XhttpExtra);
+                if (!string.IsNullOrWhiteSpace(server.XhttpExtra) && parsedExtra is not JsonObject)
+                    throw new InvalidOperationException("XHTTP extra 必须是有效的 JSON 对象。");
+                if (parsedExtra is JsonObject extra)
                 {
                     NormalizeXhttpDownloadSettings(extra);
                     settings["extra"] = extra;
@@ -844,11 +936,28 @@ namespace XrayUI.Services
 
         private static void ApplyFinalmask(JsonObject streamSettings, ServerEntry server)
         {
+            if (!string.IsNullOrWhiteSpace(server.Finalmask) && FinalmaskJson.Parse(server.Finalmask) is null)
+                throw new InvalidOperationException("finalmask 必须是有效的 JSON 对象。");
             var finalmask = FinalmaskJson.Parse(server.Finalmask);
             if (finalmask is JsonObject)
             {
                 streamSettings["finalmask"] = finalmask;
             }
+        }
+
+        internal static string NormalizeNetwork(string? network)
+        {
+            var normalized = string.IsNullOrWhiteSpace(network) ? "tcp" : network.Trim().ToLowerInvariant();
+            normalized = normalized switch
+            {
+                "raw" => "tcp",
+                "websocket" => "ws",
+                "splithttp" => "xhttp",
+                _ => normalized
+            };
+            if (normalized is "h2" or "http" or "quic")
+                throw new InvalidOperationException($"目标 Xray 核心已不支持传输类型：{normalized}。");
+            return normalized;
         }
 
         // v2board panels emit v2rayN-compact downloadSettings inside extra ({"server","servername","path","port"}),
@@ -1104,6 +1213,19 @@ namespace XrayUI.Services
                 ["type"] = "field",
                 ["outboundTag"] = ProxyOutboundTag,
                 ["domain"] = CreateStringArray("geosite:google")
+            });
+            // Windows NCSI (Network Connectivity Status Indicator) sends periodic probe
+            // requests to msftncsi.com / msftconnecttest.com to check internet reachability.
+            // Routing these through an HTTP proxy causes "unexpected EOF" warnings and makes
+            // Windows believe the network is down — which triggers reconnection storms in apps
+            // like VS Code extensions. Route them direct so NCSI always gets a clean response.
+            AddNode(rules, new JsonObject
+            {
+                ["type"] = "field",
+                ["outboundTag"] = DirectOutboundTag,
+                ["domain"] = CreateStringArray(
+                    "domain:msftncsi.com",
+                    "domain:msftconnecttest.com")
             });
             var (geositeDomestic, geoipDomestic) = RegionGeoTokens(settings.RoutingRegion);
             AddNode(rules, new JsonObject
