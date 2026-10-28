@@ -25,6 +25,12 @@ namespace XrayUI.Services
     /// </summary>
     public static class XrayConfigBuilder
     {
+        public const string ProxyTemplate = """{"inbounds":[{"tag":"mixed-in","protocol":"socks","port":1080}]}""";
+        public const string TunTemplate = """{"inbounds":[{"tag":"tun-in","protocol":"tun","settings":{"name":"xray-tun"}}]}""";
+
+        public static string BuildProfileTemplate(AppSettings settings, bool tunSlot) =>
+            tunSlot ? TunTemplate : ProxyTemplate;
+
         private const string ProxyOutboundTag = "proxy";
         private const string DirectOutboundTag = "direct";
         private const string BlockOutboundTag = "block";
@@ -63,7 +69,7 @@ namespace XrayUI.Services
                 ["dns"] = BuildDns(settings),
                 ["inbounds"] = BuildInbounds(settings, auxServers),
                 ["outbounds"] = BuildOutbounds(server, settings, availableServers, auxServers, directInterfaces, outboundInterfaces),
-                ["policy"] = BuildPolicy()
+                ["policy"] = BuildPolicy(),
                 ["routing"] = BuildRouting(settings, auxServers, directInterfaces)
             };
 
@@ -370,7 +376,7 @@ namespace XrayUI.Services
                                   && r.MatchValues.Count > 0
                                   && r.OutboundTag == BlockOutboundTag);
 
-            if (profileMode || settings.IsTunMode || customRulesUseBlock)
+            if (settings.IsTunMode || customRulesUseBlock)
             {
                 AddNode(list, new JsonObject
                 {
@@ -395,8 +401,7 @@ namespace XrayUI.Services
                 foreach (var outbound in list.OfType<JsonObject>())
                 {
                     var tag = outbound["tag"]?.GetValue<string>();
-                    if (tag is ProxyOutboundTag or DirectOutboundTag or ChainEntryOutboundTag
-                        || (tag != null && (tag.StartsWith("outbound_dedicated_") || tag.StartsWith("chain-entry-"))))
+                    if (tag is ProxyOutboundTag or DirectOutboundTag or ChainEntryOutboundTag)
                     {
                         ApplyOutboundInterface(outbound, outboundInterface);
                     }
@@ -1244,21 +1249,6 @@ namespace XrayUI.Services
                 routing["rules"] = finalRules;
             }
 
-            if (directInterfaces.Count > 0)
-            {
-                var selectors = new JsonArray();
-                for (var i = 0; i < directInterfaces.Count; i++)
-                    AddValue(selectors, $"direct-interface-{i}");
-
-                var balancers = new JsonArray();
-                AddNode(balancers, new JsonObject
-                {
-                    ["tag"] = "direct-balancer",
-                    ["selector"] = selectors,
-                    ["strategy"] = new JsonObject { ["type"] = "random" }
-                });
-                routing["balancers"] = balancers;
-            }
             return routing;
         }
 

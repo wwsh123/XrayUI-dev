@@ -68,6 +68,8 @@ public class PortHelperTests
     [Fact]
     public void GetTcpListenerProcessIds_ReturnsTheListenerOwner()
     {
+        if (!OperatingSystem.IsWindows()) return;
+
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
         var port = ((IPEndPoint)listener.LocalEndpoint).Port;

@@ -23,6 +23,16 @@ namespace XrayUI.ViewModels
         private readonly SettingsService _settings;
         private readonly ConfigProfileStore _profiles;
         private readonly IDialogService _dialogs;
+        private bool _saveInProgress;
+        private readonly AsyncRelayCommand _saveCommand;
+        private readonly AsyncRelayCommand _resetToDefaultCommand;
+        private readonly AsyncRelayCommand _previewCommand;
+        private readonly RelayCommand _openFolderCommand;
+
+        public IAsyncRelayCommand SaveCommand => _saveCommand;
+        public IAsyncRelayCommand ResetToDefaultCommand => _resetToDefaultCommand;
+        public IAsyncRelayCommand PreviewCommand => _previewCommand;
+        public IRelayCommand OpenFolderCommand => _openFolderCommand;
 
         /// <summary>Lets error dialogs root in the profile window instead of MainWindow,
         /// which would render them behind it.</summary>
@@ -55,6 +65,10 @@ namespace XrayUI.ViewModels
             _dialogs = dialogs;
             _buildConfigPreviewAsync = buildConfigPreviewAsync;
             EditorText = string.Empty;
+            _saveCommand = new AsyncRelayCommand(SaveAsync, () => CanEdit);
+            _resetToDefaultCommand = new AsyncRelayCommand(ResetToDefaultAsync, () => CanEdit);
+            _previewCommand = new AsyncRelayCommand(PreviewAsync, () => CanEdit);
+            _openFolderCommand = new RelayCommand(OpenFolder, () => CanEdit);
         }
 
         // ── Slot selection ────────────────────────────────────────────────────
@@ -98,12 +112,16 @@ namespace XrayUI.ViewModels
 
         /// <summary>Commit the selected slot together with its content, after any discard
         /// confirmation and file read. The picker cannot write an index back during loading.</summary>
-        public Task SwitchSlotAsync(int slotIndex)
+        public async Task SwitchSlotAsync(int slotIndex)
         {
             if (slotIndex is not (ProxySlotIndex or TunSlotIndex) || slotIndex == SelectedSlotIndex)
-                return Task.CompletedTask;
+                return;
 
-            return RunBusyAsync(async () =>
+            if (IsBusy || _saveInProgress)
+                return;
+
+            SetBusy(true);
+            await CompleteBusyAsync(async () =>
             {
                 if (IsDirty && !await ConfirmDiscardAsync()) return;
                 await LoadSlotAsync(slotIndex);
@@ -175,8 +193,13 @@ namespace XrayUI.ViewModels
 
         // ── Commands ──────────────────────────────────────────────────────────
 
-        [RelayCommand(CanExecute = nameof(CanEdit))]
-        private Task Save() => RunBusyAsync(SaveCoreAsync);
+        private Task SaveAsync()
+        {
+            if (IsBusy) return Task.CompletedTask;
+            _saveInProgress = true;
+            SetBusy(true);
+            return CompleteBusyAsync(SaveCoreAsync);
+        }
 
         private async Task SaveCoreAsync()
         {
@@ -230,8 +253,7 @@ namespace XrayUI.ViewModels
             else ShowWarning($"{saved} {warnings}");
         }
 
-        [RelayCommand(CanExecute = nameof(CanEdit))]
-        private Task ResetToDefault() => RunBusyAsync(ResetToDefaultCoreAsync);
+        private Task ResetToDefaultAsync() => RunBusyAsync(ResetToDefaultCoreAsync);
 
         private async Task ResetToDefaultCoreAsync()
         {
@@ -245,8 +267,7 @@ namespace XrayUI.ViewModels
             ClearValidation();
         }
 
-        [RelayCommand(CanExecute = nameof(CanEdit))]
-        private async Task Preview()
+        private async Task PreviewAsync()
         {
             // The preview builds from what is on disk, so unsaved edits would not appear in it.
             if (IsDirty)
@@ -280,7 +301,6 @@ namespace XrayUI.ViewModels
             }
         }
 
-        [RelayCommand(CanExecute = nameof(CanEdit))]
         private void OpenFolder()
         {
             ConfigProfileStore.OpenFolder();
@@ -304,7 +324,6 @@ namespace XrayUI.ViewModels
             await LoadAsync();
         }
 
-        [RelayCommand]
         private async Task Close()
         {
             if (!await ConfirmCloseAsync()) return;
@@ -326,10 +345,29 @@ namespace XrayUI.ViewModels
         private async Task RunBusyAsync(Func<Task> operation)
         {
             if (IsBusy) return;
-            IsBusy = true;
-            try { await operation(); }
-            finally { IsBusy = false; }
+            SetBusy(true);
+            await CompleteBusyAsync(operation);
         }
+
+        private async Task CompleteBusyAsync(Func<Task> operation)
+        {
+            _saveCommand.NotifyCanExecuteChanged();
+            _resetToDefaultCommand.NotifyCanExecuteChanged();
+            _previewCommand.NotifyCanExecuteChanged();
+            _openFolderCommand.NotifyCanExecuteChanged();
+            try { await operation(); }
+            finally
+            {
+                _saveInProgress = false;
+                IsBusy = false;
+                _saveCommand.NotifyCanExecuteChanged();
+                _resetToDefaultCommand.NotifyCanExecuteChanged();
+                _previewCommand.NotifyCanExecuteChanged();
+                _openFolderCommand.NotifyCanExecuteChanged();
+            }
+        }
+
+        private void SetBusy(bool value) => IsBusy = value;
 
         private Task ShowDialogErrorAsync(string title, string message) =>
             _dialogs.ShowErrorAsync(title, message, GetXamlRoot?.Invoke());
