@@ -1,4 +1,5 @@
 ﻿using System.Text.Json.Nodes;
+using System.Text.Json;
 using XrayUI.Models;
 using XrayUI.Services;
 using Xunit;
@@ -38,6 +39,119 @@ public class MultiNodeRoutingTests
         Assert.NotNull(doc["stats"]);
         Assert.True(doc["policy"]!["system"]!["statsInboundUplink"]!.GetValue<bool>());
         Assert.True(doc["policy"]!["system"]!["statsInboundDownlink"]!.GetValue<bool>());
+    [Fact]
+    public void Build_Chain_UsesDialerProxyAndRetainsSockopt()
+    {
+        var entry = new ServerEntry { Id = "entry", Protocol = "vless", Host = "entry.example", Port = 443, Uuid = "e", Network = "ws", Path = "/ws" };
+        var exit = new ServerEntry { Id = "exit", Protocol = "trojan", Host = "exit.example", Port = 443, Password = "p", Network = "tcp" };
+        var chain = new ServerEntry { Protocol = "chain", ChainEntryServerId = entry.Id, ChainExitServerId = exit.Id };
+
+        var doc = JsonNode.Parse(XrayConfigBuilder.Build(chain, new AppSettings(), [chain, entry, exit]))!.AsObject();
+        var proxy = doc["outbounds"]!.AsArray().Single(node => node!["tag"]!.GetValue<string>() == "proxy")!.AsObject();
+
+        Assert.Null(proxy["proxySettings"]);
+        Assert.Equal("chain-entry", proxy["streamSettings"]!["sockopt"]!["dialerProxy"]!.GetValue<string>());
+        Assert.Equal(15, proxy["streamSettings"]!["sockopt"]!["tcpKeepAliveIdle"]!.GetValue<int>());
+    }
+
+    [Fact]
+    public void Build_ChainWithSameEndpoint_IsRejected()
+    {
+        var endpoint = new ServerEntry { Id = "same", Protocol = "vless", Host = "node", Port = 443, Uuid = "u" };
+        var chain = new ServerEntry { Protocol = "chain", ChainEntryServerId = "same", ChainExitServerId = "same" };
+        Assert.Throws<InvalidOperationException>(() => XrayConfigBuilder.Build(chain, new AppSettings(), [chain, endpoint]));
+    }
+
+    [Fact]
+    public void Build_ChainWithMissingOrNestedEndpoint_IsRejected()
+    {
+        var endpoint = new ServerEntry { Id = "endpoint", Protocol = "vless", Host = "node", Port = 443, Uuid = "u" };
+        var chain = new ServerEntry { Protocol = "chain", ChainEntryServerId = "missing", ChainExitServerId = endpoint.Id };
+        Assert.Throws<InvalidOperationException>(() => XrayConfigBuilder.Build(chain, new AppSettings(), [chain, endpoint]));
+
+        var nested = new ServerEntry { Id = "nested", Protocol = "chain", ChainEntryServerId = endpoint.Id, ChainExitServerId = endpoint.Id };
+        chain.ChainEntryServerId = nested.Id;
+        Assert.Throws<InvalidOperationException>(() => XrayConfigBuilder.Build(chain, new AppSettings(), [chain, nested, endpoint]));
+    }
+
+    [Theory]
+    [InlineData("hysteria2", "udp")]
+    [InlineData("wireguard", "tcp")]
+    [InlineData("vless", "quic")]
+    public void Build_ChainWithUnsupportedDialerTransport_IsRejected(string protocol, string network)
+    {
+        var entry = new ServerEntry { Id = "entry", Protocol = protocol, Network = network, Host = "entry", Port = 443, Uuid = "u" };
+        var exit = new ServerEntry { Id = "exit", Protocol = "vless", Network = "tcp", Host = "exit", Port = 443, Uuid = "u" };
+        var chain = new ServerEntry { Protocol = "chain", ChainEntryServerId = entry.Id, ChainExitServerId = exit.Id };
+
+        Assert.Throws<InvalidOperationException>(() => XrayConfigBuilder.Build(chain, new AppSettings(), [chain, entry, exit]));
+    }
+
+    [Fact]
+    public void Build_Alpn_DefaultIsOmitted_AndExplicitGrpcRequiresH2()
+    {
+        var server = new ServerEntry { Protocol = "vless", Host = "node", Port = 443, Uuid = "u", Security = "tls", Network = "tcp" };
+        var defaultDoc = JsonNode.Parse(XrayConfigBuilder.Build(server, new AppSettings()))!.AsObject();
+        Assert.Null(defaultDoc["outbounds"]![0]!["streamSettings"]!["tlsSettings"]!["alpn"]);
+
+        server.Network = "grpc";
+        server.Alpn = ["http/1.1"];
+        Assert.Throws<InvalidOperationException>(() => XrayConfigBuilder.Build(server, new AppSettings()));
+        server.Alpn = ["h2"];
+        Assert.Equal("h2", JsonNode.Parse(XrayConfigBuilder.Build(server, new AppSettings()))!["outbounds"]![0]!["streamSettings"]!["tlsSettings"]!["alpn"]![0]!.GetValue<string>());
+    }
+
+    [Theory]
+    [InlineData("raw", "tcp")]
+    [InlineData("websocket", "ws")]
+    [InlineData("splithttp", "xhttp")]
+    public void Build_LegacyTransportAliases_AreNormalized(string input, string expected)
+    {
+        var server = new ServerEntry { Protocol = "vless", Host = "node", Port = 443, Uuid = "u", Security = "tls", Network = input };
+        var stream = JsonNode.Parse(XrayConfigBuilder.Build(server, new AppSettings()))!["outbounds"]![0]!["streamSettings"]!;
+        Assert.Equal(expected, stream!["network"]!.GetValue<string>());
+    }
+
+    [Theory]
+    [InlineData("h2")]
+    [InlineData("http")]
+    [InlineData("quic")]
+    public void Build_RemovedTransport_IsRejected(string network)
+    {
+        var server = new ServerEntry { Protocol = "vless", Host = "node", Port = 443, Uuid = "u", Network = network };
+        Assert.Throws<InvalidOperationException>(() => XrayConfigBuilder.Build(server, new AppSettings()));
+    }
+
+    [Fact]
+    public void Build_HttpUpgradeAndXhttp_PreserveMappedFieldsAndUnknownExtra()
+    {
+        var upgrade = new ServerEntry { Protocol = "vless", Host = "node", Port = 443, Uuid = "u", Security = "tls", Network = "httpupgrade", Path = "/up", WsHost = "cdn.example" };
+        var upgradeSettings = JsonNode.Parse(XrayConfigBuilder.Build(upgrade, new AppSettings()))!["outbounds"]![0]!["streamSettings"]!["httpupgradeSettings"]!;
+        Assert.Equal("/up", upgradeSettings!["path"]!.GetValue<string>());
+        Assert.Equal("cdn.example", upgradeSettings["host"]!.GetValue<string>());
+
+        var xhttp = new ServerEntry { Protocol = "vless", Host = "node", Port = 443, Uuid = "u", Security = "tls", Network = "xhttp", Path = "/xh", WsHost = "cdn.example", XhttpMode = "stream-up", XhttpExtra = "{\"xPaddingBytes\":\"100-200\",\"futureField\":true}" };
+        var xhttpSettings = JsonNode.Parse(XrayConfigBuilder.Build(xhttp, new AppSettings()))!["outbounds"]![0]!["streamSettings"]!["xhttpSettings"]!;
+        Assert.Equal("stream-up", xhttpSettings!["mode"]!.GetValue<string>());
+        Assert.True(xhttpSettings["extra"]!["futureField"]!.GetValue<bool>());
+    }
+
+    [Theory]
+    [InlineData("{bad", "")]
+    [InlineData("", "{bad")]
+    public void Build_InvalidXhttpExtraOrFinalmask_IsRejected(string xhttpExtra, string finalmask)
+    {
+        var server = new ServerEntry { Protocol = "vless", Host = "node", Port = 443, Uuid = "u", Security = "tls", Network = "xhttp", XhttpExtra = xhttpExtra, Finalmask = finalmask };
+        Assert.Throws<InvalidOperationException>(() => XrayConfigBuilder.Build(server, new AppSettings()));
+    }
+
+    [Fact]
+    public void ServerEntry_LegacyJsonWithoutAlpn_UsesEmptyDefault()
+    {
+        var server = JsonSerializer.Deserialize<ServerEntry>("{\"host\":\"node\",\"network\":\"raw\"}");
+        Assert.NotNull(server);
+        Assert.Empty(server.Alpn);
+        Assert.Equal("tcp", XrayConfigBuilder.NormalizeNetwork(server.Network));
     }
 
     [Fact]

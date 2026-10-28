@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using XrayUI.Helpers;
 using XrayUI.Models;
@@ -18,10 +19,13 @@ namespace XrayUI.Services
         private static readonly string ServersFile  = Path.Combine(DataDir, "servers.json");
 
         private AppSettings? _cachedSettings;
+        private readonly SerializedFileSaver _settingsSaver;
+        private readonly SettingsCacheEpoch _settingsEpoch = new();
 
         public SettingsService()
         {
             Directory.CreateDirectory(DataDir);
+            _settingsSaver = new SerializedFileSaver(WriteAtomicAsync);
         }
 
         /// <summary>Drop the in-memory cache so the next LoadSettingsAsync re-reads the file.
@@ -58,31 +62,37 @@ namespace XrayUI.Services
             if (_cachedSettings is not null)
                 return _cachedSettings;
 
+            var generation = _settingsEpoch.Capture();
+
             try
             {
                 if (!File.Exists(SettingsFile))
                 {
-                    _cachedSettings = new AppSettings { RoutingRegion = InferDefaultRoutingRegion() };
-                    return _cachedSettings;
+                    var created = new AppSettings { RoutingRegion = InferDefaultRoutingRegion() };
+                    if (_settingsEpoch.IsCurrent(generation)) _cachedSettings = created;
+                    return _cachedSettings ?? created;
                 }
 
                 var json = await File.ReadAllTextAsync(SettingsFile).ConfigureAwait(false);
+                AppSettings loaded;
                 try
                 {
-                    _cachedSettings = JsonSerializer.Deserialize(json, AppJsonSerializerContext.Default.AppSettings) ?? new AppSettings();
+                    loaded = JsonSerializer.Deserialize(json, AppJsonSerializerContext.Default.AppSettings) ?? new AppSettings();
                 }
                 catch (JsonException ex)
                 {
                     QuarantineInvalidJson(SettingsFile, ex);
-                    _cachedSettings = new AppSettings { RoutingRegion = InferDefaultRoutingRegion() };
-                    return _cachedSettings;
+                    var recovered = new AppSettings { RoutingRegion = InferDefaultRoutingRegion() };
+                    if (_settingsEpoch.IsCurrent(generation)) _cachedSettings = recovered;
+                    return _cachedSettings ?? recovered;
                 }
 
                 // One-time migration: settings.json written before XrayLogLevel existed only has
                 // the legacy VerboseXrayLog bool. Populate the new field so every other reader
                 // can trust it's non-null instead of re-deriving the fallback on every read.
-                _cachedSettings.XrayLogLevel ??= _cachedSettings.VerboseXrayLog ? XrayLogLevel.Info : XrayLogLevel.Warning;
-                return _cachedSettings;
+                loaded.XrayLogLevel ??= loaded.VerboseXrayLog ? XrayLogLevel.Info : XrayLogLevel.Warning;
+                if (_settingsEpoch.IsCurrent(generation)) _cachedSettings = loaded;
+                return _cachedSettings ?? loaded;
             }
             catch (Exception ex)
             {
@@ -114,9 +124,17 @@ namespace XrayUI.Services
 
         public async Task SaveSettingsAsync(AppSettings settings)
         {
-            _cachedSettings = settings;
-            var json = JsonSerializer.Serialize(settings, AppJsonSerializerContext.Default.AppSettings);
-            await WriteAtomicAsync(SettingsFile, json).ConfigureAwait(false);
+            // Serialize immediately so this request owns an immutable on-disk snapshot even if
+            // the caller continues editing its observable settings object while waiting.
+            var json = JsonSerializer.Serialize(settings, AppJsonSerializerContext.Readable<AppSettings>());
+            _settingsEpoch.BeginSave();
+            await _settingsSaver.SaveAsync(SettingsFile, json, () =>
+            {
+                // A load that began while this save was queued can only have observed the
+                // previous file, so invalidate it at the disk-commit boundary as well.
+                _settingsEpoch.CompleteSave();
+                _cachedSettings = settings;
+            }).ConfigureAwait(false);
         }
 
         // ── Server list ───────────────────────────────────────────────────────

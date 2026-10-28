@@ -37,6 +37,7 @@
          LocalizationStubs.cs) or keep the new dependency out of parser-layer
          code. -->
     <Compile Include="..\Helpers\AppVersion.cs" Link="Prod\Helpers\AppVersion.cs" />
+    <Compile Include="..\Helpers\AppPaths.cs" Link="Prod\Helpers\AppPaths.cs" />
     <Compile Include="..\Models\ServerEntry.cs" Link="Prod\Models\ServerEntry.cs" />
     <Compile Include="..\Models\SubscriptionEntry.cs" Link="Prod\Models\SubscriptionEntry.cs" />
     <Compile Include="..\Models\SubscriptionPresetEntry.cs" Link="Prod\Models\SubscriptionPresetEntry.cs" />
@@ -50,6 +51,8 @@
     <Compile Include="..\Services\LogLineParser.cs" Link="Prod\Services\LogLineParser.cs" />
     <Compile Include="..\Models\ProxyConnectionEvent.cs" Link="Prod\Models\ProxyConnectionEvent.cs" />
     <Compile Include="..\Services\ProxyTelemetry.cs" Link="Prod\Services\ProxyTelemetry.cs" />
+    <Compile Include="..\Services\DiagnosticLogService.cs" Link="Prod\Services\DiagnosticLogService.cs" />
+    <Compile Include="..\Services\ProxyOwnershipService.cs" Link="Prod\Services\ProxyOwnershipService.cs" />
     <Compile Include="..\Services\XhttpSettings.cs" Link="Prod\Services\XhttpSettings.cs" />
     <Compile Include="..\Services\EchSettings.cs" Link="Prod\Services\EchSettings.cs" />
     <Compile Include="..\Services\FinalmaskJson.cs" Link="Prod\Services\FinalmaskJson.cs" />
@@ -58,6 +61,10 @@
     <Compile Include="..\Models\CustomRoutingRule.cs" Link="Prod\Models\CustomRoutingRule.cs" />
     <Compile Include="..\Services\XrayConfigConstants.cs" Link="Prod\Services\XrayConfigConstants.cs" />
     <Compile Include="..\Services\NetworkInterfaceSelector.cs" Link="Prod\Services\NetworkInterfaceSelector.cs" />
+    <Compile Include="..\Services\TunCleanupCommands.cs" Link="Prod\Services\TunCleanupCommands.cs" />
+    <Compile Include="..\Services\XrayReadySignal.cs" Link="Prod\Services\XrayReadySignal.cs" />
+    <Compile Include="..\Services\SerializedFileSaver.cs" Link="Prod\Services\SerializedFileSaver.cs" />
+    <Compile Include="..\Services\SettingsCacheEpoch.cs" Link="Prod\Services\SettingsCacheEpoch.cs" />
     <Compile Include="..\Services\XrayLogLevel.cs" Link="Prod\Services\XrayLogLevel.cs" />
     <Compile Include="..\Services\LogMaskAddress.cs" Link="Prod\Services\LogMaskAddress.cs" />
     <Compile Include="..\Services\XrayConfigBuilder.cs" Link="Prod\Services\XrayConfigBuilder.cs" />

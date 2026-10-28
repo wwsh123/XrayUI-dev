@@ -172,7 +172,7 @@ namespace XrayUI
 
             _cleanupStarted = true;
 
-            SystemProxyService.ClearProxy();
+            ProxyOwnershipService.ClearProxy();
 
             if (_window is MainWindow mainWindow)
             {

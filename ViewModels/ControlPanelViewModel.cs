@@ -18,6 +18,7 @@ namespace XrayUI.ViewModels
         private readonly TunService _tunService;
         private readonly StartupService _startupService;
         private readonly IUpdateService _update;
+        private readonly Microsoft.UI.Dispatching.DispatcherQueue? _uiDispatcher;
         private UpdateInfo? _availableUpdate;
         private IReadOnlyList<string> _availableUpdateNotes = Array.Empty<string>();
         // Guards OnIsTunModeChanged from firing the dialog when we update internally
@@ -96,11 +97,41 @@ namespace XrayUI.ViewModels
             _tunService     = tunService;
             _startupService = startupService;
             _update         = update;
+            _uiDispatcher   = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            _xray.RunningChanged += OnCoreRunningChanged;
 
             StartStopButtonContent = L.ControlPanel_Start;
             LocalPort              = 16890;
             RoutingMode            = "smart";
             IsSystemProxyEnabled   = false;
+        }
+
+        private void OnCoreRunningChanged(object? sender, bool running)
+        {
+            if (running || IsReapplying) return;
+            void ApplyExit() => _ = HandleUnexpectedCoreExitAsync();
+            if (_uiDispatcher is null || _uiDispatcher.HasThreadAccess) ApplyExit();
+            else if (!_uiDispatcher.TryEnqueue(ApplyExit))
+                Debug.WriteLine("[ControlPanel] Could not dispatch unexpected core exit.");
+        }
+
+        private async Task HandleUnexpectedCoreExitAsync()
+        {
+            // The process may have been intentionally stopped just before this UI work ran.
+            if (_xray.IsRunning || !IsRunning || IsReapplying) return;
+            DiagnosticLogService.Write("core", "control panel handling unexpected exit");
+            if (IsTunMode)
+            {
+                try { await CleanupTunStateAsync(); }
+                catch (Exception ex) { Debug.WriteLine($"[ControlPanel] unexpected-exit TUN cleanup failed: {ex.Message}"); }
+            }
+            else
+            {
+                ProxyOwnershipService.ClearProxy();
+            }
+            _activeServer = null;
+            _activeServerName = string.Empty;
+            IsRunning = false;
         }
 
         // ── Running state ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -215,7 +246,7 @@ namespace XrayUI.ViewModels
             await CleanupTunStateAsync();
             await _xray.StopAsync();
             if (IsSystemProxyEnabled && !IsTunMode)
-                SystemProxyService.ClearProxy();
+                ProxyOwnershipService.ClearProxy();
             _activeServer     = null;
             _activeServerName = string.Empty;
             IsRunning = false;
@@ -309,7 +340,7 @@ namespace XrayUI.ViewModels
                 appSettings.LastTunServerHost    = null;
                 appSettings.IsSystemProxyEnabled = IsSystemProxyEnabled;
                 if (IsSystemProxyEnabled)
-                    SystemProxyService.SetProxy("127.0.0.1", appSettings.LocalMixedPort);
+                    ProxyOwnershipService.SetProxy("127.0.0.1", appSettings.LocalMixedPort);
                 await TrySaveSettingsAsync(appSettings, "persist system proxy settings");
             }
 
@@ -346,7 +377,7 @@ namespace XrayUI.ViewModels
                 await _xray.StopAsync();
             }
 
-            SystemProxyService.ClearProxy();
+            ProxyOwnershipService.ClearProxy();
             _activeServer     = null;
             _activeServerName = string.Empty;
             PrimaryOutboundInterface = "系统默认路由";
@@ -403,7 +434,7 @@ namespace XrayUI.ViewModels
 
                     if (IsSystemProxyEnabled)
                     {
-                        SystemProxyService.SetProxy("127.0.0.1", settings.LocalMixedPort);
+                        ProxyOwnershipService.SetProxy("127.0.0.1", settings.LocalMixedPort);
                     }
                     // IsRunning is managed manually by this VM (no subscription to
                     // _xray.RunningChanged), and the guard at the top of this method
@@ -445,7 +476,7 @@ namespace XrayUI.ViewModels
             }
             else
             {
-                SystemProxyService.ClearProxy();
+                ProxyOwnershipService.ClearProxy();
             }
 
             _activeServer     = null;
@@ -471,7 +502,7 @@ namespace XrayUI.ViewModels
             }
 
             await Task.Run(_tunService.ResetTunDnsServers);
-            SystemProxyService.ClearProxy();
+            ProxyOwnershipService.ClearProxy();
             return true;
         }
 
@@ -844,9 +875,9 @@ namespace XrayUI.ViewModels
                 if (IsRunning && !IsTunMode)
                 {
                     if (enabled)
-                        SystemProxyService.SetProxy("127.0.0.1", s.LocalMixedPort);
+                        ProxyOwnershipService.SetProxy("127.0.0.1", s.LocalMixedPort);
                     else
-                        SystemProxyService.ClearProxy();
+                        ProxyOwnershipService.ClearProxy();
                 }
             }
             catch (Exception ex)
@@ -1041,7 +1072,7 @@ namespace XrayUI.ViewModels
                 app.RequestShutdown(fastShutdown: true);
             else
             {
-                SystemProxyService.ClearProxy();
+                ProxyOwnershipService.ClearProxy();
                 _xray.StopForShutdown();
                 CleanupTunOnExit(fastShutdown: true);
                 Environment.Exit(0);

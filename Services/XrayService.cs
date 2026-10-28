@@ -2,8 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Threading;
 using System.Threading.Tasks;
 using XrayUI.Helpers;
@@ -32,6 +36,7 @@ namespace XrayUI.Services
         private static readonly TimeSpan StartupReadyCap = TimeSpan.FromSeconds(3);
 
         private Process? _process;
+        private string _sessionId = string.Empty;
 
         // Kernel-level safety net: xray.exe is assigned to a kill-on-close Job Object, so if the
         // UI process dies any way (taskkill /F, AV crash, OOM) the kernel kills xray.exe too.
@@ -170,6 +175,8 @@ namespace XrayUI.Services
             Telemetry.Reset();
             Stats.Reset();
             StatsApiPort = statsApiPort;
+            _sessionId = Guid.NewGuid().ToString("N");
+            DiagnosticLogService.Write("core", $"session={_sessionId} start requested");
 
             if (!File.Exists(ExePath))
             {
@@ -222,10 +229,12 @@ namespace XrayUI.Services
 
                 AppendLog(Loc.Format("XrayLog_Started", ExePath));
                 AppendLog(Loc.Format("XrayLog_Config", ConfigPath));
+                DiagnosticLogService.Write("core", $"session={_sessionId} started");
 
                 // Ready typically lands well under 100ms; Exited surfaces bad configs / port
-                // clashes / TUN elevation failures immediately instead of after a fixed wait.
-                // TimedOut with the process still alive counts as success, same as before.
+                // clashes / TUN elevation failures immediately. A quiet, living process is not
+                // considered ready: verify that this configuration's mixed listener accepts a
+                // loopback TCP connection before exposing it to the system proxy.
                 var readyStopwatch = Stopwatch.StartNew();
                 var outcome = await readySignal.WaitAsync(StartupReadyCap);
                 readyStopwatch.Stop();
@@ -239,6 +248,7 @@ namespace XrayUI.Services
                     _ => "TimedOut"
                 };
                 AppendLog($"[XrayUI] core readiness: {readyLabel} in {readyStopwatch.ElapsedMilliseconds} ms");
+                DiagnosticLogService.Write("core", $"session={_sessionId} readiness={readyLabel} elapsedMs={readyStopwatch.ElapsedMilliseconds}");
 
                 if (outcome == XrayReadySignal.Outcome.Exited || _process.HasExited)
                 {
@@ -252,6 +262,17 @@ namespace XrayUI.Services
                         ? startupLog
                         : Loc.Format("Xray_ExitedImmediately", _process.ExitCode);
                     AppendLog(Loc.Format("XrayLog_StartFailed", LastError));
+                    DiagnosticLogService.Write("core", $"session={_sessionId} startup failed exitCode={_process.ExitCode}");
+                    return false;
+                }
+
+                if (outcome == XrayReadySignal.Outcome.TimedOut
+                    && !await VerifyMixedInboundReadyAsync(configJson))
+                {
+                    LastError = "Xray 核心未在限定时间内监听 mixed 入站。";
+                    AppendLog(Loc.Format("XrayLog_StartFailed", LastError));
+                    DiagnosticLogService.Write("core", $"session={_sessionId} readiness listener check failed");
+                    await StopCoreAsync();
                     return false;
                 }
 
@@ -351,7 +372,8 @@ namespace XrayUI.Services
                     _process.Kill(entireProcessTree: true);
                 }
 
-                await _process.WaitForExitAsync();
+                var exited = _process.WaitForExitAsync();
+                await Task.WhenAny(exited, Task.Delay(TimeSpan.FromSeconds(3)));
             }
             catch
             {
@@ -363,7 +385,29 @@ namespace XrayUI.Services
             }
 
             AppendLog(L.XrayLog_Stopped);
+            DiagnosticLogService.Write("core", $"session={_sessionId} stopped");
             RunningChanged?.Invoke(this, false);
+        }
+
+        private static async Task<bool> VerifyMixedInboundReadyAsync(string configJson)
+        {
+            try
+            {
+                var root = JsonNode.Parse(configJson) as JsonObject;
+                var inbound = root?["inbounds"]?.AsArray().FirstOrDefault(node =>
+                    string.Equals(node?["tag"]?.GetValue<string>(), XrayConfigConstants.MixedInboundTag, StringComparison.Ordinal));
+                if (inbound?["port"]?.GetValue<int>() is not int port || port is < 1 or > 65535)
+                    return false;
+
+                using var client = new TcpClient();
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+                await client.ConnectAsync("127.0.0.1", port, timeout.Token);
+                return client.Connected;
+            }
+            catch (Exception ex) when (ex is SocketException or OperationCanceledException or JsonException)
+            {
+                return false;
+            }
         }
 
         /// <summary>
@@ -425,7 +469,12 @@ namespace XrayUI.Services
 
         private void OnProcessExited(object? sender, EventArgs e)
         {
+            // Stop/reapply may already have installed a newer process by the time Windows
+            // dispatches this event. An old exit must never turn the newer session off.
+            if (!ReferenceEquals(sender, _process)) return;
             AppendLog(L.XrayLog_ProcessExited);
+            var exitCode = sender is Process process && process.HasExited ? process.ExitCode : -1;
+            DiagnosticLogService.Write("core", $"session={_sessionId} unexpected exitCode={exitCode}");
             RunningChanged?.Invoke(this, false);
         }
 
