@@ -12,14 +12,6 @@ namespace XrayUI.Views
 {
     public sealed partial class CustomRulesWindow
     {
-        private const int GWLP_HWNDPARENT = -8;
-
-        [DllImport("User32.dll", CharSet = CharSet.Auto, EntryPoint = "SetWindowLongPtr")]
-        private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
-
-        [DllImport("User32.dll", CharSet = CharSet.Auto, EntryPoint = "SetWindowLong")]
-        private static extern IntPtr SetWindowLong(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
-
         private readonly Window _owner;
 
         public CustomRulesViewModel ViewModel { get; }
@@ -41,10 +33,9 @@ namespace XrayUI.Views
 
             ToolTipService.SetToolTip(OpenAdvancedEditorButton, L.CustomRules_AdvancedEditorTooltip);
 
-			var presenter = OverlappedPresenter.CreateForDialog();
+            ToolTipService.SetToolTip(OpenAdvancedEditorButton, L.CustomRules_AdvancedEditorTooltip);
 
-            // 1. Set Win32 owner BEFORE IsModal — IsModal requires an owner.
-            SetWindowOwner(owner);
+            this.ShowAsOwnedModal(owner);
 
             // 2. Mark presenter modal, then commit it to the AppWindow.
             presenter.IsModal = true;

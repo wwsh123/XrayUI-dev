@@ -475,7 +475,7 @@ namespace XrayUI.ViewModels
         // to finish, and an older snapshot landing last rolls the file back over the newer one. The
         // wait resumes on the UI thread, so the snapshot is taken by whichever writer holds the lock —
         // the last commit is always the newest list. Update all made this routine rather than rare.
-        private async Task SaveAsync()
+        public async Task SaveAsync()
         {
             await _serversWriteLock.WaitAsync();
             try
@@ -1976,6 +1976,9 @@ namespace XrayUI.ViewModels
             var server = target ?? SelectedServer;
             if (server is null) return;
 
+            // Prevent enabling auxiliary proxy if the server is the active main proxy
+            if (server.IsActive && !server.IsDedicatedPortActive) return;
+
             if (!server.DedicatedPort.HasValue || server.DedicatedPort.Value <= 0)
             {
                 var existingSlots = Servers.Where(candidate => candidate != server && candidate.HasDedicatedPort);
@@ -2044,7 +2047,10 @@ namespace XrayUI.ViewModels
                 server.DedicatedPort = result.Value.port;
                 server.AllowDedicatedLan = result.Value.allowLan;
                 server.AuxiliaryOutboundInterface = result.Value.outboundInterface;
-                server.IsDedicatedPortActive = true;
+                if (!server.IsActive)
+                {
+                    server.IsDedicatedPortActive = true;
+                }
             }
 
             await SaveAsync();

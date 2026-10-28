@@ -39,6 +39,8 @@
                        Margin="12,12,12,0"
                        FontFamily="Cascadia Code, Consolas, Courier New"
                        FontSize="12"
+                       LineHeight="20"
+                       LineStackingStrategy="BlockLineHeight"
                        IsTextSelectionEnabled="True"
                        TextWrapping="NoWrap"
                        Foreground="{ThemeResource TextFillColorPrimaryBrush}" />

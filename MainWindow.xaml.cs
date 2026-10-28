@@ -11,6 +11,7 @@ using Windows.UI;
 using WinUIEx;
 using WinUIEx.Messaging;
 using XrayUI.Helpers;
+using XrayUI.Models;
 using XrayUI.Services;
 
 namespace XrayUI
@@ -44,6 +45,11 @@ namespace XrayUI
         // Set when we parked the window off-screen at startup; cleared after
         // we re-center it on the first user-initiated show (tray click).
         private bool _needsCenterOnFirstShow;
+        // Opened by a left click on the tray icon; created on first use and kept.
+        private Views.TrayPanelWindow? _trayPanel;
+        // When and where the click that last opened the tray panel landed; see IsSecondTrayClick.
+        private long _trayClickAt;
+        private NativePoint _trayClickPoint;
 
         private const uint WmQueryEndSession = 0x0011;
         private const uint WmEndSession = 0x0016;
@@ -69,11 +75,19 @@ namespace XrayUI
         private const uint TrayIconId = 0x5852;
 
         public MainViewModel ViewModel { get; }
+        private readonly TaskCompletionSource _initialization = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        internal Task Initialization => _initialization.Task;
 
-        public MainWindow(bool startMinimized = false)
+        internal void ShowFullWindow()
         {
-            _startMinimized           = startMinimized;
-            _needsCenterOnFirstShow   = startMinimized;
+            RestoreFromTray();
+            SetMiniMode(false);
+        }
+
+        public MainWindow(LaunchKind launchKind)
+        {
+            _launchKind               = launchKind;
+            _needsCenterOnFirstShow   = StartMinimized;
 
             // Build services before InitializeComponent so ViewModel is ready for x:Bind
             var settingsService = new SettingsService();
@@ -147,7 +161,7 @@ namespace XrayUI
             // stays alive for any dialogs raised during InitializeAsync (e.g.
             // auto-connect errors). The full tray transition (ReleaseUiResources)
             // runs after init so resources are still freed in the minimized case.
-            if (_startMinimized)
+            if (StartMinimized)
             {
                 AppWindow.IsShownInSwitchers = false;
                 AppWindow.Hide();
@@ -458,7 +472,7 @@ namespace XrayUI
                         return;
                     }
 
-                    SystemProxyService.ClearProxy();
+                    ProxyOwnershipService.ClearProxy();
                     StopBackgroundServicesOnExit();
                 }
                 catch (Exception ex)
@@ -696,7 +710,7 @@ namespace XrayUI
                     }
                     else
                     {
-                        SystemProxyService.ClearProxy();
+                        ProxyOwnershipService.ClearProxy();
                         StopBackgroundServicesOnExit(fastShutdown: true);
                     }
                 }

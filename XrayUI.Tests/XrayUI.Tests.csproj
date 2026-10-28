@@ -28,7 +28,7 @@
   <ItemGroup>
     <Protobuf Include="..\Services\Traffic\stats_service.proto" GrpcServices="Client" />
     <Compile Include="..\Models\Traffic\*.cs" Link="Prod\Models\Traffic\%(Filename)%(Extension)" />
-    <Compile Include="..\Services\Traffic\*.cs" Link="Prod\Services\Traffic\%(Filename)%(Extension)" />
+    <Compile Include="..\Services\Traffic\*.cs" Exclude="..\Services\Traffic\StatsService.cs;..\Services\Traffic\StatsServiceGrpc.cs" Link="Prod\Services\Traffic\%(Filename)%(Extension)" />
     <Compile Include="..\Helpers\TrafficPresentation.cs" Link="Prod\Helpers\TrafficPresentation.cs" />
     <Compile Include="..\ViewModels\TrafficMonitorViewModel.cs" Link="Prod\ViewModels\TrafficMonitorViewModel.cs" />
     <!-- Production sources under test, compiled in directly. If a linked file
@@ -37,12 +37,20 @@
          LocalizationStubs.cs) or keep the new dependency out of parser-layer
          code. -->
     <Compile Include="..\Helpers\AppVersion.cs" Link="Prod\Helpers\AppVersion.cs" />
+    <Compile Include="..\Helpers\AppPaths.cs" Link="Prod\Helpers\AppPaths.cs" />
+    <Compile Include="..\Helpers\CommandLineArguments.cs" Link="Prod\Helpers\CommandLineArguments.cs" />
     <Compile Include="..\Models\ServerEntry.cs" Link="Prod\Models\ServerEntry.cs" />
+    <Compile Include="..\Models\CloudflareAccount.cs" Link="Prod\Models\CloudflareAccount.cs" />
     <Compile Include="..\Models\SubscriptionEntry.cs" Link="Prod\Models\SubscriptionEntry.cs" />
     <Compile Include="..\Models\SubscriptionPresetEntry.cs" Link="Prod\Models\SubscriptionPresetEntry.cs" />
     <Compile Include="..\Models\SubscriptionRefreshSchedule.cs" Link="Prod\Models\SubscriptionRefreshSchedule.cs" />
     <Compile Include="..\Models\ChangelogFeed.cs" Link="Prod\Models\ChangelogFeed.cs" />
+    <Compile Include="..\Models\PresetSettings.cs" Link="Prod\Models\PresetSettings.cs" />
     <Compile Include="..\Services\ChangelogSelector.cs" Link="Prod\Services\ChangelogSelector.cs" />
+    <Compile Include="..\Services\ConfigProfileJson.cs" Link="Prod\Services\ConfigProfileJson.cs" />
+    <Compile Include="..\Services\XrayConfigConstants.cs" Link="Prod\Services\XrayConfigConstants.cs" />
+    <Compile Include="..\Services\JumpListRequest.cs" Link="Prod\Services\JumpListRequest.cs" />
+    <Compile Include="..\Services\RecentConnectionHistory.cs" Link="Prod\Services\RecentConnectionHistory.cs" />
     <Compile Include="..\Services\NodeLinkParser.cs" Link="Prod\Services\NodeLinkParser.cs" />
     <Compile Include="..\Services\NodeLinkSerializer.cs" Link="Prod\Services\NodeLinkSerializer.cs" />
     <Compile Include="..\Services\ClashConfigParser.cs" Link="Prod\Services\ClashConfigParser.cs" />
@@ -50,15 +58,22 @@
     <Compile Include="..\Services\LogLineParser.cs" Link="Prod\Services\LogLineParser.cs" />
     <Compile Include="..\Models\ProxyConnectionEvent.cs" Link="Prod\Models\ProxyConnectionEvent.cs" />
     <Compile Include="..\Services\ProxyTelemetry.cs" Link="Prod\Services\ProxyTelemetry.cs" />
+    <Compile Include="..\Services\DiagnosticLogService.cs" Link="Prod\Services\DiagnosticLogService.cs" />
+    <Compile Include="..\Services\ProxyOwnershipService.cs" Link="Prod\Services\ProxyOwnershipService.cs" />
     <Compile Include="..\Services\XhttpSettings.cs" Link="Prod\Services\XhttpSettings.cs" />
     <Compile Include="..\Services\EchSettings.cs" Link="Prod\Services\EchSettings.cs" />
     <Compile Include="..\Services\FinalmaskJson.cs" Link="Prod\Services\FinalmaskJson.cs" />
+    <Compile Include="..\Services\RouteTestProtocol.cs" Link="Prod\Services\RouteTestProtocol.cs" />
     <Compile Include="..\Helpers\PortHelper.cs" Link="Prod\Helpers\PortHelper.cs" />
     <Compile Include="..\Models\AppSettings.cs" Link="Prod\Models\AppSettings.cs" />
     <Compile Include="..\Models\CustomRoutingRule.cs" Link="Prod\Models\CustomRoutingRule.cs" />
-    <Compile Include="..\Services\XrayConfigConstants.cs" Link="Prod\Services\XrayConfigConstants.cs" />
     <Compile Include="..\Services\NetworkInterfaceSelector.cs" Link="Prod\Services\NetworkInterfaceSelector.cs" />
+    <Compile Include="..\Services\TunCleanupCommands.cs" Link="Prod\Services\TunCleanupCommands.cs" />
+    <Compile Include="..\Services\XrayReadySignal.cs" Link="Prod\Services\XrayReadySignal.cs" />
+    <Compile Include="..\Services\SerializedFileSaver.cs" Link="Prod\Services\SerializedFileSaver.cs" />
+    <Compile Include="..\Services\SettingsCacheEpoch.cs" Link="Prod\Services\SettingsCacheEpoch.cs" />
     <Compile Include="..\Services\XrayLogLevel.cs" Link="Prod\Services\XrayLogLevel.cs" />
+    <Compile Include="..\ViewModels\ConfigProfileViewModel.cs" Link="Prod\ViewModels\ConfigProfileViewModel.cs" />
     <Compile Include="..\Services\LogMaskAddress.cs" Link="Prod\Services\LogMaskAddress.cs" />
     <Compile Include="..\Services\XrayConfigBuilder.cs" Link="Prod\Services\XrayConfigBuilder.cs" />
     <Compile Include="..\Services\SubscriptionRefreshBatchRunner.cs" Link="Prod\Services\SubscriptionRefreshBatchRunner.cs" />

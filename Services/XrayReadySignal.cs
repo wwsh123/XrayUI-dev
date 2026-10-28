@@ -26,6 +26,12 @@ namespace XrayUI.Services
         {
         }
 
+        // The service uses Attach(Process); these hooks exercise the same state machine with a
+        // deterministic process substitute, without launching a core in unit tests.
+        internal static XrayReadySignal CreateForTest() => new();
+        internal void ObserveOutputForTest(string? line) => OnOutputLine(line);
+        internal void MarkExitedForTest() => _outcome.TrySetResult(Outcome.Exited);
+
         /// <summary>
         /// Wires a signal onto <paramref name="process"/>: subscribes its own stdout/stderr/
         /// Exited handlers (multicast, so the caller's logging handlers are unaffected) and

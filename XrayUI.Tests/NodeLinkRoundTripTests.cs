@@ -51,6 +51,14 @@ namespace XrayUI.Tests
 
                 var va = p.GetValue(a);
                 var vb = p.GetValue(b);
+                if (va is IEnumerable<string> stringsA && vb is IEnumerable<string> stringsB)
+                {
+                    if (stringsA.SequenceEqual(stringsB)) continue;
+                }
+                else if (Equals(va, vb))
+                {
+                    continue;
+                }
                 if (!Equals(va, vb))
                     mismatches.Add($"{p.Name}: \"{va}\" != \"{vb}\"");
             }
@@ -111,6 +119,12 @@ namespace XrayUI.Tests
             var ech = Uri.EscapeDataString("AEX+DQBBzQAgACBSvVUkExampleConfigList=");
             RoundTrip("vless://u-u-i-d@example.com:443" +
                       $"?type=tcp&security=tls&sni=example.com&encryption=none&echConfigList={ech}&echForceQuery=half#ECH");
+        }
+
+        [Fact]
+        public void RoundTrip_VlessExplicitAlpnAndHttpUpgrade()
+        {
+            RoundTrip("vless://u-u-i-d@example.com:443?type=httpupgrade&security=tls&sni=example.com&path=%2Fup&host=cdn.example.com&alpn=http%2F1.1&encryption=none#Upgrade");
         }
 
         [Fact]

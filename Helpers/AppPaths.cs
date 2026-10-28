@@ -11,6 +11,7 @@ namespace XrayUI.Helpers
         public static string LocalAppDataDir => DataDir;
 
         public static string UpdatesDir { get; } = Path.Combine(DataDir, "Updates");
+        public static string XrayConfigPreviewPath { get; } = Path.Combine(DataDir, "xray-config-preview.json");
 
         public static string SettingsJsonPath { get; } = Path.Combine(DataDir, "settings.json");
         public static string ServersJsonPath { get; } = Path.Combine(DataDir, "servers.json");

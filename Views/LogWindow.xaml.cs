@@ -134,7 +134,11 @@ namespace XrayUI.Views
 
         private void OnRunningChanged(object? sender, bool running)
         {
-            _queue.TryEnqueue(UpdateStatus);
+            _queue.TryEnqueue(() =>
+            {
+                UpdateStatus();
+                ResetRouteTest();
+            });
         }
 
         private void OnFlushTick(DispatcherQueueTimer sender, object args)
@@ -318,6 +322,115 @@ namespace XrayUI.Views
             StatusText.Text = running ? L.Log_Running : L.Log_NotRunning;
             StatusDot.Fill  = running ? RunningBrush : StoppedBrush;
         }
+
+        // ── Route test ─────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Enables the tester only while a core that exposes the route-test API is running, and
+        /// drops any shown result: it described the rules of a core that is gone. The typed
+        /// target stays, so a test can be rerun right after a reapply.
+        /// </summary>
+        private void ResetRouteTest()
+        {
+            _routeTestGeneration++;
+
+            var running   = _xray.IsRunning;
+            var available = running && _xray.RouteTest is not null;
+            RouteTestInput.IsEnabled     = available;
+            RouteTestRunButton.IsEnabled = available;
+
+            ShowRouteTestState(null, available
+                ? null
+                : running ? L.RouteTest_ApiOwnedByProfile : L.RouteTest_NotRunning);
+        }
+
+        private async Task RunRouteTestAsync()
+        {
+            // The run button doubles as the busy flag: it is disabled while a test is in flight,
+            // and the input (hence Enter) is disabled whenever the tester is unavailable.
+            var endpoint = _xray.RouteTest;
+            if (!RouteTestRunButton.IsEnabled || endpoint is null) return;
+
+            if (!RouteTestProtocol.TryParseTarget(RouteTestInput.Text, out var target))
+            {
+                ShowRouteTestState(null, L.RouteTest_InvalidInput);
+                return;
+            }
+
+            var generation = _routeTestGeneration;
+            RouteTestRunButton.IsEnabled = false;
+            ShowRouteTestState(null, null, busy: true);
+
+            var result = await RouteTestService.TestAsync(endpoint, target);
+            if (generation != _routeTestGeneration) return;
+
+            RouteTestRunButton.IsEnabled = true;
+            ShowRouteTestResult(result);
+        }
+
+        private void ShowRouteTestResult(RouteTestResult result)
+        {
+            if (result.Outcome == RouteTestOutcome.Failed)
+            {
+                ShowRouteTestState(null, Loc.Format("RouteTest_Failed", result.Detail));
+                return;
+            }
+
+            var tag = result.Detail;
+            var kind = RouteTestProtocol.Classify(tag);
+            FrameworkElement badge = kind switch
+            {
+                RouteTestOutboundKind.Proxy  => RouteTestProxyBadge,
+                RouteTestOutboundKind.Direct => RouteTestDirectBadge,
+                RouteTestOutboundKind.Block  => RouteTestBlockBadge,
+                _                            => RouteTestOtherBadge,
+            };
+            // A tag XrayUI did not name (e.g. a balancer's pick) is its own badge label.
+            RouteTestOtherText.Text = tag;
+
+            var detail = result.Outcome == RouteTestOutcome.NoRuleMatched
+                ? Loc.Format("RouteTest_NoRuleMatched", tag)
+                : kind == RouteTestOutboundKind.Other ? null : Loc.Format("RouteTest_OutboundTag", tag);
+            ShowRouteTestState(badge, detail);
+        }
+
+        /// <param name="badge">The outcome badge to show, or null for none.</param>
+        private void ShowRouteTestState(FrameworkElement? badge, string? detail, bool busy = false)
+        {
+            var hasMarker = busy || badge is not null;
+
+            RouteTestProgress.IsActive   = busy;
+            RouteTestProgress.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+            foreach (var element in new FrameworkElement[]
+                     { RouteTestProxyBadge, RouteTestDirectBadge, RouteTestBlockBadge, RouteTestOtherBadge })
+            {
+                element.Visibility = element == badge ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            // ColumnSpacing applies even when the badge column is empty, which would indent a
+            // message-only row against the input above it.
+            RouteTestResultRow.ColumnSpacing = hasMarker ? 8 : 0;
+            RouteTestDetail.Text = detail ?? string.Empty;
+            RouteTestResultRow.Visibility = hasMarker || !string.IsNullOrEmpty(detail)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+
+        private void RouteTestFlyout_Opened(object sender, object e)
+        {
+            RouteTestInput.Focus(FocusState.Programmatic);
+            RouteTestInput.SelectAll();
+        }
+
+        private void RouteTestInput_KeyDown(object sender, KeyRoutedEventArgs e)
+        {
+            if (e.Key != VirtualKey.Enter) return;
+
+            e.Handled = true;
+            _ = RunRouteTestAsync();
+        }
+
+        private void RouteTestRunButton_Click(object sender, RoutedEventArgs e) => _ = RunRouteTestAsync();
 
         // ── Button handlers ────────────────────────────────────────────────────
 

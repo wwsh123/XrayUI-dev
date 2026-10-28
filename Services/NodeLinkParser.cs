@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Text.Json;
 using XrayUI.Models;
@@ -71,6 +72,17 @@ namespace XrayUI.Services
                     // SIP002 candidate
                     var userinfoPart = rest.Substring(0, atIdx);
                     var hostPart     = rest.Substring(atIdx + 1);
+
+                    // SIP002 permits one optional '/' after the port. Query and fragment
+                    // have already been handled; leave credentials untouched and reject
+                    // non-empty paths instead of silently discarding their contents.
+                    var slashIdx = hostPart.IndexOf('/');
+                    if (slashIdx >= 0)
+                    {
+                        if (slashIdx != hostPart.Length - 1)
+                            return null;
+                        hostPart = hostPart.Substring(0, slashIdx);
+                    }
 
                     var decoded = TryBase64Decode(userinfoPart);
                     if (decoded != null && decoded.Contains(':'))
@@ -173,11 +185,12 @@ namespace XrayUI.Services
                            : int.TryParse(v.GetString(), out int n) ? n : def)
                         : def;
 
-                var net      = GetStr("net", "tcp");
+                var net      = NormalizeNetwork(GetStr("net", "tcp"));
                 var tls      = GetStr("tls", "");
                 var security = tls == "tls" ? "tls" : "none";
                 var allowInsecure = IsTruthy(GetStr("allowInsecure")) || IsTruthy(GetStr("insecure"));
                 var finalmask = FinalmaskJson.NormalizeForStorage(GetStr("fm", GetStr("finalmask")));
+                var alpn = GetStr("alpn").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 
                 return new ServerEntry
                 {
@@ -194,6 +207,7 @@ namespace XrayUI.Services
                     Sni         = GetStr("sni"),
                     Fingerprint = GetStr("fp"),
                     AllowInsecure = allowInsecure,
+                    Alpn        = alpn,
                     Finalmask   = finalmask,
                     Encryption  = security == "tls" ? "TLS" : "None"
                 };
@@ -221,7 +235,7 @@ namespace XrayUI.Services
 
                 var query = ParseQuery(uri.Query);
 
-                var network  = Q(query, "type",     "tcp") ?? "tcp";
+                var network  = NormalizeNetwork(Q(query, "type", "tcp") ?? "tcp");
                 var security = Q(query, "security", "none") ?? "none";
                 var sni      = Q(query, "sni") ?? Q(query, "servername") ?? string.Empty;
                 var fp       = Q(query, "fp",   string.Empty) ?? string.Empty;
@@ -237,6 +251,7 @@ namespace XrayUI.Services
                     Q(query, "echForceQuery") ?? Q(query, "echfq"));
                 var finalmask = FinalmaskJson.NormalizeForStorage(Q(query, "fm"));
                 var allowInsecure = IsTruthy(Q(query, "allowInsecure")) || IsTruthy(Q(query, "insecure"));
+                var alpn = (Q(query, "alpn") ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 
                 // Gated on xhttp: grpc links reuse the "mode" key for gun/multi. Case-insensitive
                 // because network keeps the URI's original casing (only the builder lowercases).
@@ -260,6 +275,7 @@ namespace XrayUI.Services
                     Sni         = sni,
                     Fingerprint = fp,
                     AllowInsecure = allowInsecure,
+                    Alpn        = alpn,
                     EchConfigList = echConfigList,
                     EchForceQuery = echForceQuery,
                     PublicKey   = pk,
@@ -413,8 +429,8 @@ namespace XrayUI.Services
                     : Uri.UnescapeDataString(uri.Fragment.TrimStart('#'));
 
                 var query = ParseQuery(uri.Query);
-                var network = NormalizeTrojanNetwork(
-                    Q(query, "type") ?? Q(query, "network") ?? "tcp");
+                var network = NormalizeNetwork(NormalizeTrojanNetwork(
+                    Q(query, "type") ?? Q(query, "network") ?? "tcp"));
                 var security = Q(query, "security", "tls") ?? "tls";
                 if (string.IsNullOrWhiteSpace(security))
                     security = "tls";
@@ -426,6 +442,7 @@ namespace XrayUI.Services
                 var wsHost = Q(query, "host", string.Empty) ?? string.Empty;
                 var finalmask = FinalmaskJson.NormalizeForStorage(Q(query, "fm"));
                 var allowInsecure = IsTruthy(Q(query, "allowInsecure")) || IsTruthy(Q(query, "insecure"));
+                var alpn = (Q(query, "alpn") ?? string.Empty).Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 
                 return new ServerEntry
                 {
@@ -439,6 +456,7 @@ namespace XrayUI.Services
                     Sni           = sni,
                     Fingerprint   = fp,
                     AllowInsecure = allowInsecure,
+                    Alpn          = alpn,
                     Path          = path,
                     WsHost        = wsHost,
                     Finalmask     = finalmask,
@@ -516,6 +534,14 @@ namespace XrayUI.Services
             network = network.ToLowerInvariant();
             return network == "original" ? "tcp" : network;
         }
+
+        private static string NormalizeNetwork(string network) => network.Trim().ToLowerInvariant() switch
+        {
+            "raw" => "tcp",
+            "websocket" => "ws",
+            "splithttp" => "xhttp",
+            var value => value
+        };
 
         private static (string host, int port) SplitHostPort(string hostPort)
         {
