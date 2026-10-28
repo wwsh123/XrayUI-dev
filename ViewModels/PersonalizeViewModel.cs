@@ -24,6 +24,7 @@ namespace XrayUI.ViewModels
         private bool _suppressRegionRestartHint;
 
         public event EventHandler? CloseRequested;
+        public event EventHandler? PresetImported;
 
         public PersonalizeViewModel(IDialogService dialogs, SettingsService settings)
         {
@@ -192,11 +193,107 @@ namespace XrayUI.ViewModels
             FallbackColor  = Color.FromArgb(255, 148, 163, 184);
         }
 
-        [RelayCommand]
-        private async Task Done()
+        public Task<string> ExportPresetAsync() =>
+            new PresetExportService(_settings).ExportAsync();
+
+        /// <summary>
+        /// Returns the settings instance the caller can edit, or reports a failed load.
+        /// Reload on Done to pick up hand-edits made while the panel was open.
+        /// </summary>
+        private async Task<AppSettings?> LoadWritableSettingsAsync(bool reload = false)
         {
-            var s = await _settings.LoadSettingsAsync();
+            var settings = await (reload ? _settings.ReloadAsync() : _settings.LoadSettingsAsync());
+            if (!settings.IsFailedLoadFallback) return settings;
+
+            await _dialogs.ShowErrorAsync(L.Settings_InvalidTitle, L.Settings_InvalidMsg);
+            return null;
+        }
+
+        public static bool PresetExists() => PresetImportService.PresetExists();
+
+        /// <summary>
+        /// Parses a Clash YAML config and appends its supported nodes to the saved server list
+        /// (pure append, no dedupe — same semantics as "import from link"). Reuses the
+        /// <see cref="PresetImported"/> reload path so the live list refreshes from disk.
+        /// Returns (imported, skipped). Throws on invalid YAML — the caller surfaces it.
+        /// Caller is expected to check <see cref="IsProxyRunning"/> and block before calling.
+        /// </summary>
+        public async Task<(int Imported, int Skipped)> ImportClashConfigAsync(string yamlText)
+        {
+            var parsed = ClashConfigParser.Parse(yamlText);
+
+            if (parsed.Nodes.Count > 0)
+            {
+                // Imported nodes are manual entries (ServerEntry defaults SubscriptionId to "").
+                var servers = await _settings.LoadServersAsync();
+                servers.AddRange(parsed.Nodes);
+                await _settings.SaveServersAsync(servers);
+                PresetImported?.Invoke(this, EventArgs.Empty);
+            }
+
+            return (parsed.Nodes.Count, parsed.Skipped);
+        }
+
+        public async Task<PresetImportResult?> ConfirmAndImportPresetAsync()
+        {
+            var confirmed = await _dialogs.ShowConfirmationAsync(
+                L.Confirm_ReplaceTitle,
+                L.Confirm_ReplaceMsg,
+                L.Dialog_Replace,
+                L.Dialog_Cancel,
+                isDanger: true);
+            if (!confirmed)
+                return null;
+
+            var result = await new PresetImportService(_settings).ApplyAsync();
+            PresetImported?.Invoke(this, EventArgs.Empty);
+            return result;
+        }
+
+        public enum ClearDataResult
+        {
+            Cancelled,
+            BlockedByProxy,
+            Cleared,
+        }
+
+        public async Task<ClearDataResult> ConfirmAndResetAllDataAsync()
+        {
+            var confirmed = await _dialogs.ShowConfirmationAsync(
+                L.Personalize_ClearDataConfirmTitle,
+                L.Personalize_ClearDataConfirmMsg,
+                L.Personalize_ClearDataConfirmBtn,
+                L.Dialog_Cancel,
+                isDanger: true);
+            if (!confirmed)
+                return ClearDataResult.Cancelled;
+
+            if (IsProxyRunning?.Invoke() == true)
+                return ClearDataResult.BlockedByProxy;
+
+            await ResetAllDataAsync();
+            return ClearDataResult.Cleared;
+        }
+
+        public Task ResetAllDataAsync() => WithStartupWriteLockAsync(async () =>
+        {
+            // Finish any pending startup/Done save before replacing settings. The caller
+            // restarts immediately on success, so do not trigger live setters or reload
+            // events here: their asynchronous saves could write old state back to disk.
+            await Task.Run(() => _startup.SetStartupEnabled(false));
+            await _settings.ResetToDefaultsAsync();
+        });
+
+        [RelayCommand]
+        private Task Done() => WithStartupWriteLockAsync(SaveAndCloseAsync);
+
+        private async Task SaveAndCloseAsync()
+        {
+            var s = await LoadWritableSettingsAsync(reload: true);
+            if (s is null) return;
+
             ProtocolColorStore.SaveTo(s);
+            GlobalHotkeyStore.SaveTo(s);
             s.ThemeSetting = ThemeHelper.CurrentTheme switch
             {
                 ElementTheme.Light   => "Light",

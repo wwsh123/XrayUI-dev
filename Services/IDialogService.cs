@@ -22,7 +22,6 @@ namespace XrayUI.Services
         /// </summary>
         Task<bool> ShowTunConfirmationDialogAsync(AppSettings settings);
         Task ShowShareLinkDialogAsync(string serverName, string link);
-        Task<(bool enabled, bool autoConnect)?> ShowStartupDialogAsync(bool currentEnabled, bool currentAutoConnect);
 
         /// <summary>
         /// Confirmation shown before an app update starts. Returns true when the

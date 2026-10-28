@@ -27,6 +27,16 @@ namespace XrayUI.ViewModels
         // Tracks the server host of the currently active TUN session (for cleanup)
         private string? _currentTunServerHost;
 
+        // The local socks/http port the running config actually exposes, captured at start and
+        // on every reapply. The proxy-mode toggle re-points the WinInet registry without
+        // rebuilding the config, so it cannot read the port back out of a fresh build the way
+        // start and reapply do.
+        private int? _activeLocalProxyPort;
+
+        // Mirrors AppSettings.Use*ConfigProfile so the gear menu can gate on it synchronously.
+        private bool _useTunConfigProfile;
+        private bool _useProxyConfigProfile;
+
         public XrayService XrayService => _xray;
         public SettingsService SettingsService => _settings;
 
@@ -40,6 +50,26 @@ namespace XrayUI.ViewModels
         // against the live session rather than whatever is now selected in the list.
         private ServerEntry? _activeServer;
         private string _activeServerName = string.Empty;
+
+        public ServerEntry? ActiveServer => IsRunning ? _activeServer : null;
+
+        /// <summary>Id of the node xray is running right now, or null when stopped. Read by
+        /// PersonalizeViewModel when auto-connect is switched on mid-session, so the
+        /// auto-connect target is the node actually in use rather than whatever the list has selected.</summary>
+        public string? ActiveServerId => ActiveServer?.Id;
+
+        /// <summary>The local socks/http port the running config actually exposes, or null when
+        /// xray is stopped or the active config profile publishes no socks/http inbound on a
+        /// fixed port. Everything that dials the core in-process reads this — subscription
+        /// fetches, the update check and download, the AI-unlock probes — so a profile that
+        /// moves or drops the inbound cannot leave them on a dead port. <see cref="LocalPort"/>
+        /// stays the *configured* value the port editor edits; this is the *running* one, and
+        /// the two only differ under a config profile.</summary>
+        public int? ActiveLocalProxyPort => IsRunning ? _activeLocalProxyPort : null;
+
+        // HTTP supports both HTTP-only profiles and Xray's socks/mixed inbounds.
+        public string? ActiveLocalProxyUrl =>
+            ActiveLocalProxyPort is { } port ? $"http://127.0.0.1:{port}" : null;
 
         // Serializes concurrent reapply calls (custom-rules save, routing-mode toggle,
         // proxy-mode toggle can all race) and blocks re-entry.
@@ -82,6 +112,11 @@ namespace XrayUI.ViewModels
         [RelayCommand]
         private void ShowCloudflare() => ShowCloudflareRequested?.Invoke(this, EventArgs.Empty);
         public event EventHandler<CustomRulesViewModel>? ShowCustomRulesRequested;
+        /// <summary>Carries the slot to open on alongside the VM: the window has to seed it
+        /// before InitializeComponent, so it cannot read the mode off the VM afterwards.</summary>
+        public readonly record struct ConfigProfileRequest(ConfigProfileViewModel ViewModel, bool TunSlot);
+
+        public event EventHandler<ConfigProfileRequest>? ShowConfigProfilesRequested;
 
         public ControlPanelViewModel(
             IDialogService dialogs,
@@ -158,6 +193,7 @@ namespace XrayUI.ViewModels
             StartStopButtonChecked = value;
             OnPropertyChanged(nameof(StatusText));
             OnPropertyChanged(nameof(IsModeToggleEnabled));
+            OnPropertyChanged(nameof(IsBuiltInConfigEnabled));
             OnPropertyChanged(nameof(IsTunToggleEnabled));
             NotifyStartStopStateChanged();
         }
@@ -241,6 +277,49 @@ namespace XrayUI.ViewModels
             }
         }
 
+        /// <summary>Connect to an explicit taskbar target, preserving an existing session's mode.
+        /// Selection and the start/switch share the same gate as other connection operations.</summary>
+        public async Task ConnectFromJumpListAsync(string serverId, Func<bool> selectServer, bool useDefaultMode)
+        {
+            await _reapplyLock.WaitAsync();
+            try
+            {
+                IsReapplying = true;
+                if (!await SelectTargetAsync()) return;
+
+                // A session whose xray already died is stopped like a live one, but the
+                // connect then counts as a cold start.
+                var live = IsRunning && _xray.IsRunning;
+                if (live && string.Equals(ActiveServerId, serverId, StringComparison.Ordinal)) return;
+                if (IsRunning) await StopCurrentSessionAsync();
+
+                if (!live && useDefaultMode)
+                {
+                    // For this session only: SetProxyMode is the sole writer of the saved proxy
+                    // mode, so the next normal launch comes back in the mode the user chose.
+                    SetTunEnabledSilently(false);
+                    IsSystemProxyEnabled = true;
+                }
+
+                // Selection may change while stopping; the explicit request remains authoritative.
+                if (!await SelectTargetAsync()) return;
+                await StartSelectedServerAsync();
+            }
+            catch (Exception ex) { await HandleStartStopFailureAsync(ex); }
+            finally
+            {
+                IsReapplying = false;
+                _reapplyLock.Release();
+            }
+
+            async Task<bool> SelectTargetAsync()
+            {
+                if (selectServer() && CanStartSelectedServer()) return true;
+                await _dialogs.ShowErrorAsync(L.JumpList_Title, L.JumpList_Unavailable);
+                return false;
+            }
+        }
+
         private async Task StopCurrentSessionAsync()
         {
             await CleanupTunStateAsync();
@@ -249,6 +328,7 @@ namespace XrayUI.ViewModels
                 ProxyOwnershipService.ClearProxy();
             _activeServer     = null;
             _activeServerName = string.Empty;
+            _activeLocalProxyPort = null;
             IsRunning = false;
         }
 
@@ -344,8 +424,9 @@ namespace XrayUI.ViewModels
                 await TrySaveSettingsAsync(appSettings, "persist system proxy settings");
             }
 
-            _activeServer     = server;
-            _activeServerName = server.Name;
+            _activeServer            = server;
+            _activeServerName        = server.Name;
+            _activeLocalProxyPort   = built.SystemProxyPort;
             IsRunning = true;
 
 
@@ -395,7 +476,6 @@ namespace XrayUI.ViewModels
         {
             if (!IsRunning) return;
             if (_activeServer is null) return;
-            if (IsTunMode) return;
 
             await _reapplyLock.WaitAsync();
             try
@@ -457,6 +537,40 @@ namespace XrayUI.ViewModels
         }
 
         /// <summary>
+        /// TUN counterpart of the plain restart in <see cref="ReapplyRoutingAsync"/>: the stop and
+        /// start a node switch runs, targeting the live node. xray owns the TUN routes
+        /// (autoSystemRoutingTable), so a fresh session re-creates the adapter and its routes on
+        /// its own; the stop half runs the route/DNS cleanup and the start half the preflight,
+        /// exactly as when switching. Existing connections drop, as they do on a switch.
+        ///
+        /// Unlike a switch, the session is torn down without <see cref="ClearActiveSession"/>, so
+        /// IsRunning stays true throughout, as it does across the proxy-mode restart. Flipping it
+        /// would read as a fresh connect to MainViewModel — rerunning the AI probes, the update
+        /// check and the Jump List record for a node that never changed. Only a failed start
+        /// clears the session. Caller holds _reapplyLock.
+        /// </summary>
+        private async Task ReapplyTunSessionAsync(ServerEntry activeServer)
+        {
+            IsReapplying = true;
+            try
+            {
+                await CleanupTunStateAsync();
+                await _xray.StopAsync();
+                if (!await StartSelectedServerAsync(activeServer))
+                    ClearActiveSession();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[ControlPanel] TUN reapply failed: {ex}");
+                await HandleStartStopFailureAsync(ex);
+            }
+            finally
+            {
+                IsReapplying = false;
+            }
+        }
+
+        /// <summary>
         /// Reapply failed. xray is stopped (StartAsync stops first, then failed).
         /// Clear state, revert UI to not-running, notify user.
         /// Caller is already inside _reapplyLock.
@@ -469,7 +583,23 @@ namespace XrayUI.ViewModels
             }
             catch (Exception ex) { Debug.WriteLine($"[ControlPanel] Stop after reapply failure: {ex.Message}"); }
 
-            if (IsTunMode)
+            // Proxy mode only: a TUN reapply fails through the switch path's handler instead.
+            SystemProxyService.ClearProxy();
+
+            ClearActiveSession();
+
+            await _dialogs.ShowErrorAsync(L.Error_ReapplyFailed, detail);
+        }
+
+
+
+        /// <summary>
+        /// Runs the shared TUN-mode preflight: wintun availability and system-proxy clearing.
+        /// Xray-core handles outbound interface selection through autoOutboundsInterface="auto".
+        /// </summary>
+        private async Task<bool> RunTunPreflightAsync()
+        {
+            if (!_tunService.IsWintunAvailable())
             {
                 try { await CleanupTunStateAsync(); }
                 catch (Exception ex) { Debug.WriteLine($"[ControlPanel] TUN cleanup after reapply failure: {ex.Message}"); }
@@ -638,6 +768,8 @@ namespace XrayUI.ViewModels
         partial void OnIsTunModeChanged(bool value)
         {
             OnPropertyChanged(nameof(TunModeText));
+            // The active slot follows the mode, so the custom-config gates move with it.
+            NotifyConfigProfileStateChanged();
             OnPropertyChanged(nameof(IsModeToggleEnabled));
             if (!_isTunInternalUpdate)
                 _ = HandleTunToggleAsync(value);
@@ -841,7 +973,7 @@ namespace XrayUI.ViewModels
             s.RoutingMode = mode;
             await TrySaveSettingsAsync(s, "persist routing mode");
 
-            // Apply live if xray is currently running (UI only allows this when !IsTunMode).
+            // Apply live if xray is currently running (a TUN session is rebuilt).
             if (IsRunning)
             {
                 try { await ReapplyRoutingAsync(); }

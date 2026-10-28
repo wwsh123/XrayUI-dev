@@ -448,22 +448,38 @@ namespace XrayUI.ViewModels
         /// <summary>
         /// Called by the view / MainViewModel when the proxy starts or stops.
         /// </summary>
-        public void OnProxyRunningChanged(bool isRunning, int httpProxyPort)
+        public void OnProxyRunningChanged(bool isRunning)
         {
             CancelPendingAiCheck();
             IsProxyRunning = isRunning;
 
-            if (!isRunning)
-            {
-                ClearAiUnlockResults();
-                UpdateAiUnlockDisplay();
-                return;
-            }
-
             ClearAiUnlockResults();
             _geminiSwitchRequested = false;
             UpdateAiUnlockDisplay();
-            _ = RunAiUnlockChecksAsync(httpProxyPort);
+            StartAiUnlockChecksIfNeeded();
+        }
+
+        /// <summary>
+        /// Runs the three checks for the live session unless their results could not be seen:
+        /// while the AI row is hidden they are three HTTPS round trips through the new node on
+        /// every connect, competing with the user's own first requests. Showing the row
+        /// mid-session re-enters here; a session that already has results or an in-flight check
+        /// is left alone.
+        /// </summary>
+        private void StartAiUnlockChecksIfNeeded()
+        {
+            if (!IsProxyRunning || !ShowAiUnlockInDetails || _aiCheckCts is not null)
+                return;
+
+            if (_openAiStatus is not null || _claudeStatus is not null || _geminiStatus is not null)
+                return;
+
+            // No local port means a config profile publishes no socks/http inbound, so there is
+            // nothing to probe through. Leave the dots neutral instead of running the checks:
+            // every failure path in AiUnlockCheckService reports Blocked, which would paint a
+            // red "this node is blocked" for what is really "we never reached the core".
+            if (GetActiveLocalProxyPort() is { } port)
+                _ = RunAiUnlockChecksAsync(port);
         }
 
         private async Task RunAiUnlockChecksAsync(int httpProxyPort)

@@ -16,6 +16,8 @@ namespace XrayUI.ViewModels
     {
         private readonly IDialogService _dialogs;
         private readonly SettingsService _settings;
+        private readonly IDialogService _dialogs;
+        private readonly JumpListService _jumpList = new();
         private readonly StartupService _startupService;
         private readonly IUpdateService _updateService;
         private readonly DispatcherQueue? _uiDispatcher;
@@ -92,6 +94,7 @@ namespace XrayUI.ViewModels
         {
             _dialogs        = dialogs;
             _settings       = settings;
+            _dialogs        = dialogs;
             _startupService = startupService;
             _updateService  = updateService;
             _trafficStore = new TrafficMonitorStore(new TrafficMonitorOptions(
@@ -109,6 +112,7 @@ namespace XrayUI.ViewModels
             var latencyProbe = new LatencyProbeService(
                 new TcpConnectProbeService(),
                 new PingProbeService());
+            var realLatencyProbe = new RealLatencyProbeService(settings, tunService);
             var aiUnlockCheck = new AiUnlockCheckService();
             var realLatencyProbe = new RealLatencyProbeService(settings, tunService, aiUnlockCheck);
 
@@ -152,6 +156,7 @@ namespace XrayUI.ViewModels
             ControlPanel.ShowPersonalizeRequested += (_, _) => OpenPersonalize();
             ControlPanel.ExitRequested += (_, _) => ExitRequested?.Invoke(this, EventArgs.Empty);
             Personalize.CloseRequested            += (_, _) => ClosePersonalize();
+            Personalize.PresetImported            += OnPresetImported;
 
             ControlPanel.ShowAppSettingsRequested += (_, _) => OpenAppSettings();
             AppSettings.CloseRequested            += (_, _) => CloseAppSettings();
@@ -163,7 +168,7 @@ namespace XrayUI.ViewModels
 
         // ── Startup initialisation (call after Window is ready) ───────────────
 
-        public async Task InitializeAsync(bool isBootLaunch = false)
+        public async Task InitializeAsync(LaunchKind launchKind)
         {
             await FirstRunWizardService.RunWizardIfNeededAsync(_dialogs, _settings);
             await new InitialImportService(_settings).ImportAsync();
@@ -184,6 +189,8 @@ namespace XrayUI.ViewModels
             ControlPanel.AllowLanConnections   = s.AllowLanConnections;
             ControlPanel.RoutingMode           = s.RoutingMode;
             ControlPanel.IsSystemProxyEnabled  = s.IsSystemProxyEnabled;
+            // Gates the gear items a config profile owns, and the "custom" routing label.
+            ControlPanel.ApplyConfigProfileState(s.UseTunConfigProfile, s.UseProxyConfigProfile);
             ControlPanel.InitializePersonalize(s);
             Personalize.LoadDisplayOptions(s);
             Personalize.LoadLanguage(s);
@@ -753,6 +760,7 @@ namespace XrayUI.ViewModels
             if (e.PropertyName == nameof(ServerListViewModel.SelectedServer))
             {
                 ServerDetail.SelectedServer = ServerList.SelectedServer;
+                OnPropertyChanged(nameof(DisplayedServer));
                 OnPropertyChanged(nameof(ActiveServerName));
                 OnPropertyChanged(nameof(TrayTooltip));
                 ControlPanel.NotifyStartStopStateChanged();
@@ -854,6 +862,7 @@ namespace XrayUI.ViewModels
                 _trafficCollector.StopSession();
             UpdateActiveServer(isRunning ? ServerList.SelectedServer : null);
             ServerList.IsProxyRunning = isRunning;
+            OnPropertyChanged(nameof(DisplayedServer));
             OnPropertyChanged(nameof(ActiveServerName));
             OnPropertyChanged(nameof(TrayTooltip));
             OnPropertyChanged(nameof(MiniIsRunning));

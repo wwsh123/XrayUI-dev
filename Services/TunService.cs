@@ -191,6 +191,8 @@ public class TunService
         {
             var batch = TunCleanupCommands.Build(TunInterfaceName, serverAddress);
 
+            batch.AddRange(BuildDnsResetBatch());
+
             RunElevatedBatch(batch);
             Debug.WriteLine("[TunService] TUN 路由兜底清理完成");
         }

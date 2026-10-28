@@ -9,6 +9,17 @@ using XrayUI.Models;
 namespace XrayUI.Services
 {
     /// <summary>
+    /// A built config plus the runtime facts the C# side needs from it.
+    /// </summary>
+    /// <param name="Json">The config text handed to xray.exe.</param>
+    /// <param name="SystemProxyPort">The port SystemProxyService should advertise, read back out
+    /// of the built config so a profile that moves the port cannot desync the two. Null when the
+    /// config exposes no socks/http inbound on a plain integer port.</param>
+    /// <param name="RouteTest">Where the running core answers route tests. Null only when a config
+    /// profile declares its own api section.</param>
+    public readonly record struct BuiltXrayConfig(string Json, int? SystemProxyPort, RouteTestEndpoint? RouteTest);
+
+    /// <summary>
     /// Builds an xray-core JSON configuration string for the given server and app settings.
     /// Uses JsonObject/JsonArray so Native AOT does not need reflection-based serialization.
     /// </summary>
@@ -359,7 +370,7 @@ namespace XrayUI.Services
                                   && r.MatchValues.Count > 0
                                   && r.OutboundTag == BlockOutboundTag);
 
-            if (settings.IsTunMode || customRulesUseBlock)
+            if (profileMode || settings.IsTunMode || customRulesUseBlock)
             {
                 AddNode(list, new JsonObject
                 {

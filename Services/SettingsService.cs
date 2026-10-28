@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -21,6 +21,16 @@ namespace XrayUI.Services
         private AppSettings? _cachedSettings;
         private readonly SerializedFileSaver _settingsSaver;
         private readonly SettingsCacheEpoch _settingsEpoch = new();
+
+        // Every write to settings.json / servers.json passes this gate, so a factory reset can
+        // wait out a write already in flight before it seals the files.
+        private readonly SemaphoreSlim _writeGate = new(1, 1);
+
+        // Set by ResetToDefaultsAsync and left set when it succeeds, because the caller restarts
+        // straight afterwards. Any other write before exit would come from state loaded before
+        // the reset (a held AppSettings instance, the live server list) and bring the wiped data
+        // back. Only touched under _writeGate.
+        private bool _writesSealed;
 
         public SettingsService()
         {
@@ -53,6 +63,82 @@ namespace XrayUI.Services
                 FileName = SettingsFile,
                 UseShellExecute = true,
             });
+        }
+
+        /// <summary>Drop the in-memory cache so the next LoadSettingsAsync re-reads the file.
+        /// Used when an external process (e.g. the user's text editor) may have modified
+        /// settings.json on disk.</summary>
+        public void InvalidateCache() => _cachedSettings = null;
+
+        /// <summary>Invalidate the cache and reload from disk in one call.</summary>
+        public async Task<AppSettings> ReloadAsync()
+        {
+            InvalidateCache();
+            return await LoadSettingsAsync().ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// Drop the cache and shell-open settings.json in the user's default .json editor.
+        /// Cache is dropped first so subsequent reads pick up whatever the editor writes.
+        /// Throws if the OS reports no association for .json.
+        /// </summary>
+        public void OpenInExternalEditor()
+        {
+            InvalidateCache();
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = SettingsFile,
+                UseShellExecute = true,
+            });
+        }
+
+        /// <summary>
+        /// Resets all application settings and server entries to defaults on disk,
+        /// and deletes user-authored config profiles and generated xray configs.
+        /// On success every later save is refused for the life of the process, so the
+        /// caller must restart straight afterwards.
+        /// </summary>
+        public async Task ResetToDefaultsAsync()
+        {
+            await _writeGate.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                _writesSealed = true;
+
+                // A failed deletion must reach the caller so it reports failure instead of
+                // restarting into an apparently successful but incomplete factory reset.
+                if (Directory.Exists(AppPaths.ProfilesDir))
+                {
+                    Directory.Delete(AppPaths.ProfilesDir, recursive: true);
+                }
+                File.Delete(AppPaths.XrayConfigPath);
+                File.Delete(AppPaths.XrayConfigPreviewPath);
+                File.Delete(AppPaths.XraySpeedtestConfigPath);
+                // The taskbar's recent list itself is emptied by the startup refresh after the
+                // restart, which prunes every ID the (now empty) server list no longer has.
+                File.Delete(AppPaths.RecentConnectionsPath);
+
+                var defaultSettings = new AppSettings
+                {
+                    RoutingRegion = InferDefaultRoutingRegion(),
+                    SkipInitialImport = true,
+                };
+                _cachedSettings = defaultSettings;
+                var settingsJson = JsonSerializer.Serialize(defaultSettings, AppJsonSerializerContext.Readable<AppSettings>());
+                var serversJson = JsonSerializer.Serialize(new List<ServerEntry>(), AppJsonSerializerContext.Readable<List<ServerEntry>>());
+                await AtomicFile.WriteAllTextAsync(SettingsFile, settingsJson).ConfigureAwait(false);
+                await AtomicFile.WriteAllTextAsync(ServersFile, serversJson).ConfigureAwait(false);
+            }
+            catch
+            {
+                // No restart follows a failed reset, so the app has to be able to save again.
+                _writesSealed = false;
+                throw;
+            }
+            finally
+            {
+                _writeGate.Release();
+            }
         }
 
         // ── AppSettings ───────────────────────────────────────────────────────
@@ -97,7 +183,10 @@ namespace XrayUI.Services
             catch (Exception ex)
             {
                 Debug.WriteLine($"[SettingsService] Failed to load settings: {ex.Message}");
-                return new AppSettings();
+                // Deliberately not cached: the next call retries the file, so a hand-repair takes
+                // effect without a restart. The instance is stamped so SaveSettingsAsync refuses
+                // it no matter how much later the caller gets around to saving.
+                return new AppSettings { IsFailedLoadFallback = true };
             }
         }
 

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -60,6 +60,12 @@ namespace XrayUI.Services
         public bool IsRunning => _process is { HasExited: false };
 
         public string LastError { get; private set; } = string.Empty;
+
+        /// <summary>
+        /// Route-test API of the running core, or null when nothing is running or the config
+        /// exposes none. Set before RunningChanged(true) fires and cleared before (false) does.
+        /// </summary>
+        public RouteTestEndpoint? RouteTest { get; private set; }
 
         public event EventHandler<string>? LogReceived;
 
@@ -188,7 +194,7 @@ namespace XrayUI.Services
             try
             {
                 Directory.CreateDirectory(Path.GetDirectoryName(ConfigPath)!);
-                await File.WriteAllTextAsync(ConfigPath, configJson);
+                await File.WriteAllTextAsync(ConfigPath, config.Json);
 
                 var psi = new ProcessStartInfo
                 {
@@ -446,6 +452,7 @@ namespace XrayUI.Services
 
             process.Exited -= OnProcessExited;
             _process = null;
+            RouteTest = null;
 
             try
             {
