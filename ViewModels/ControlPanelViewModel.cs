@@ -591,33 +591,6 @@ namespace XrayUI.ViewModels
             await _dialogs.ShowErrorAsync(L.Error_ReapplyFailed, detail);
         }
 
-
-
-        /// <summary>
-        /// Runs the shared TUN-mode preflight: wintun availability and system-proxy clearing.
-        /// Xray-core handles outbound interface selection through autoOutboundsInterface="auto".
-        /// </summary>
-        private async Task<bool> RunTunPreflightAsync()
-        {
-            if (!_tunService.IsWintunAvailable())
-            {
-                try { await CleanupTunStateAsync(); }
-                catch (Exception ex) { Debug.WriteLine($"[ControlPanel] TUN cleanup after reapply failure: {ex.Message}"); }
-            }
-            else
-            {
-                ProxyOwnershipService.ClearProxy();
-            }
-
-            _activeServer     = null;
-            _activeServerName = string.Empty;
-            IsRunning = false;
-
-            await _dialogs.ShowErrorAsync(L.Error_ReapplyFailed, detail);
-        }
-
-
-
         /// <summary>
         /// Runs the shared TUN-mode preflight: wintun availability and system-proxy clearing.
         /// Xray-core handles outbound interface selection through autoOutboundsInterface="auto".

@@ -16,7 +16,6 @@ namespace XrayUI.ViewModels
     {
         private readonly IDialogService _dialogs;
         private readonly SettingsService _settings;
-        private readonly IDialogService _dialogs;
         private readonly JumpListService _jumpList = new();
         private readonly StartupService _startupService;
         private readonly IUpdateService _updateService;
@@ -94,7 +93,6 @@ namespace XrayUI.ViewModels
         {
             _dialogs        = dialogs;
             _settings       = settings;
-            _dialogs        = dialogs;
             _startupService = startupService;
             _updateService  = updateService;
             _trafficStore = new TrafficMonitorStore(new TrafficMonitorOptions(
@@ -112,7 +110,6 @@ namespace XrayUI.ViewModels
             var latencyProbe = new LatencyProbeService(
                 new TcpConnectProbeService(),
                 new PingProbeService());
-            var realLatencyProbe = new RealLatencyProbeService(settings, tunService);
             var aiUnlockCheck = new AiUnlockCheckService();
             var realLatencyProbe = new RealLatencyProbeService(settings, tunService, aiUnlockCheck);
 
