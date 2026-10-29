@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using Microsoft.UI.Xaml.Controls;
@@ -157,7 +158,7 @@ namespace XrayUI.Views
                 // actual host window. They also support elevated TUN sessions.
                 if (format == "folder")
                 {
-                    var folderPicker = new FolderPicker(_hostWindowId);
+                    var folderPicker = new FolderPicker(_hostHwnd);
                     var folder = await folderPicker.PickSingleFolderAsync();
                     if (folder is null) return;
 
@@ -166,7 +167,7 @@ namespace XrayUI.Views
                     return;
                 }
 
-                var picker = new FileOpenPicker(_hostWindowId);
+                var picker = new FileOpenPicker(_hostHwnd);
                 picker.FileTypeFilter.Add(".exe");
                 var files = await picker.PickMultipleFilesAsync();
                 if (files.Count == 0) return;
@@ -190,115 +191,6 @@ namespace XrayUI.Views
                 IsPrimaryButtonEnabled = true;
                 ApplyBrowseFormatUiState();
             }
-        }
-
-        // ── Type changes: toggle BrowsePanel, swap placeholder + hint ─────────
-
-        private void TypeComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-            => ApplyTypeUiState();
-
-        private void ApplyTypeUiState()
-        {
-            var tag = GetSelectedType();
-
-            if (BrowsePanel is not null)
-                BrowsePanel.Visibility = tag == "process" ? Visibility.Visible : Visibility.Collapsed;
-
-            if (MatchTextBox is not null)
-            {
-                MatchTextBox.PlaceholderText = tag switch
-                {
-                    "ip"      => L.AddRule_PlaceholderIp,
-                    "process" => L.AddRule_PlaceholderProcess,
-                    _         => L.AddRule_PlaceholderDomain,
-                };
-            }
-
-            if (HintTextBlock is not null)
-            {
-                HintTextBlock.Text = tag switch
-                {
-                    "ip"      => L.AddRule_HintIp,
-                    "process" => L.AddRule_HintProcess,
-                    _         => L.AddRule_HintDomain,
-                };
-            }
-        }
-
-        // ── Browse format changes: swap button label between exe / folder ────
-
-        private void BrowseFormatComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-            => ApplyBrowseFormatUiState();
-
-        private void ApplyBrowseFormatUiState()
-        {
-            if (BrowseButtonText is null) return;
-            var isFolder = GetSelectedBrowseFormat() == "folder";
-            BrowseButtonText.Text = isFolder ? L.AddRule_BrowseFolder : L.AddRule_BrowseExe;
-            if (BrowseButtonIcon is not null)
-            {
-                BrowseButtonIcon.Glyph = isFolder ? "\uE8DA" : "\uE8E5";
-            }
-        }
-
-        // Native AOT can be brittle around object-valued ComboBoxItem.Tag from XAML.
-        // These lists are static, so index mapping keeps dialog state deterministic.
-        private string GetSelectedType() => TypeComboBox.SelectedIndex switch
-        {
-            1 => "ip",
-            2 => "process",
-            _ => "domain",
-        };
-
-        private string GetSelectedBrowseFormat() => BrowseFormatComboBox.SelectedIndex switch
-        {
-            1 => "path",
-            2 => "folder",
-            _ => "name",
-        };
-
-        private string GetSelectedOutboundTag() => OutboundComboBox.SelectedIndex switch
-        {
-            1 => "direct",
-            2 => "block",
-            _ => "proxy",
-        };
-
-        // ── Browse click: file picker for name/path, folder picker for folder ──
-
-        private async void BrowseButton_Click(object sender, RoutedEventArgs e)
-        {
-            var format = GetSelectedBrowseFormat();
-
-            if (format == "folder")
-            {
-                var folderPicker = new FolderPicker
-                {
-                    SuggestedStartLocation = PickerLocationId.ComputerFolder,
-                };
-                folderPicker.FileTypeFilter.Add("*");
-                WinRT.Interop.InitializeWithWindow.Initialize(folderPicker, _hostHwnd);
-
-                var folder = await folderPicker.PickSingleFolderAsync();
-                if (folder is null) return;
-
-                // Trailing backslash makes xray treat this as a folder match for
-                // all executables under the directory.
-                AppendMatchValues([folder.Path.TrimEnd('\\') + "\\"]);
-                return;
-            }
-
-            var picker = new FileOpenPicker
-            {
-                SuggestedStartLocation = PickerLocationId.ComputerFolder,
-            };
-            picker.FileTypeFilter.Add(".exe");
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, _hostHwnd);
-
-            var files = await picker.PickMultipleFilesAsync();
-            if (files.Count == 0) return;
-
-            AppendMatchValues(files.Select(file => format == "path" ? file.Path : file.Name));
         }
 
         private void OnPrimaryClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)

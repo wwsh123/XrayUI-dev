@@ -47,9 +47,8 @@ namespace XrayUI
         private bool _needsCenterOnFirstShow;
         // Opened by a left click on the tray icon; created on first use and kept.
         private Views.TrayPanelWindow? _trayPanel;
-        // When and where the click that last opened the tray panel landed; see IsSecondTrayClick.
+        // When the click that last opened the tray panel landed; see IsSecondTrayClick.
         private long _trayClickAt;
-        private NativePoint _trayClickPoint;
 
         private const uint WmQueryEndSession = 0x0011;
         private const uint WmEndSession = 0x0016;
