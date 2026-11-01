@@ -97,7 +97,7 @@
                             <Border CornerRadius="4"
                                     Background="{ThemeResource SystemFillColorAttentionBackgroundBrush}"
                                     Padding="8,2"
-                                    Visibility="{x:Bind DomainVisibility}">
+                                    Visibility="{x:Bind DomainVisibility, Mode=OneTime}">
                                 <TextBlock Text="Domain"
                                            FontSize="11"
                                            FontWeight="SemiBold"
@@ -106,7 +106,7 @@
                             <Border CornerRadius="4"
                                     Background="{ThemeResource SystemFillColorSuccessBackgroundBrush}"
                                     Padding="8,2"
-                                    Visibility="{x:Bind IpVisibility}">
+                                    Visibility="{x:Bind IpVisibility, Mode=OneTime}">
                                 <TextBlock Text="IP"
                                            FontSize="11"
                                            FontWeight="SemiBold"
@@ -132,7 +132,7 @@
 
                         <!-- Outbound tag -->
                         <TextBlock Grid.Column="2"
-                                   Text="{x:Bind OutboundTag}"
+                                   Text="{x:Bind OutboundTag, Mode=OneTime}"
                                    FontWeight="SemiBold"
                                    Margin="0,0,8,0"
                                    VerticalAlignment="Center" />

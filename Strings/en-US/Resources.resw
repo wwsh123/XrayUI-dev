@@ -1432,4 +1432,196 @@ Path: {0}</value>
   <data name="Traffic_EmptyPending" xml:space="preserve"><value>This page is ready. Addresses and graphs will appear after traffic collection is connected.</value></data>
   <data name="Traffic_EmptyFilter" xml:space="preserve"><value>No accesses match these filters.</value></data>
   <data name="Traffic_Empty" xml:space="preserve"><value>No access events yet. Only traffic handled by Xray appears here.</value></data>
+  <data name="ConfigProfile_Title" xml:space="preserve">
+    <value>Configuration Profiles</value>
+  </data>
+  <data name="ConfigProfile_OpenFolderTooltip" xml:space="preserve">
+    <value>Open configuration profiles folder</value>
+  </data>
+  <data name="ConfigProfile_PreviewTooltip" xml:space="preserve">
+    <value>Preview the configuration for the next connection</value>
+  </data>
+  <data name="ConfigProfile_EditorAutomationName" xml:space="preserve">
+    <value>Custom configuration JSON editor, excluding outbounds</value>
+  </data>
+  <data name="ConfigProfile_LoadFailed" xml:space="preserve">
+    <value>Could not load the configuration profile or settings. Check the files and access permissions, then try again.</value>
+  </data>
+  <data name="ConfigProfile_SaveFailedTitle" xml:space="preserve">
+    <value>Could Not Save Configuration Profile</value>
+  </data>
+  <data name="ConfigProfile_SettingsUnwritable" xml:space="preserve">
+    <value>The profile file was saved, but its enabled state could not be saved to settings.json. Check the settings file and access permissions, then save again. The previously saved enabled state remains in effect.</value>
+  </data>
+  <data name="ConfigProfile_Saved" xml:space="preserve">
+    <value>Saved and enabled. This profile will be used on the next connection in this mode; the current connection is unchanged. Xray will check whether the assembled configuration can run when it starts.</value>
+  </data>
+  <data name="ConfigProfile_SavedInactive" xml:space="preserve">
+    <value>Saved, but the custom profile is disabled. Connections in this mode will use the generated configuration; the current connection is unchanged.</value>
+  </data>
+  <data name="ConfigProfile_ResetTitle" xml:space="preserve">
+    <value>Reset the Editor to Defaults?</value>
+  </data>
+  <data name="ConfigProfile_ResetMsg" xml:space="preserve">
+    <value>This will replace the editor contents for the selected mode with the default template, including any unsaved edits. It will not change the saved file or enabled state until you click Save. Continue?</value>
+  </data>
+  <data name="ConfigProfile_PreviewStaleTitle" xml:space="preserve">
+    <value>Save Changes Before Previewing</value>
+  </data>
+  <data name="ConfigProfile_PreviewStaleMsg" xml:space="preserve">
+    <value>The preview uses the saved configuration and enabled state, not unsaved changes in this window. Save your changes first, then preview again.</value>
+  </data>
+  <data name="ConfigProfile_PreviewTitle" xml:space="preserve">
+    <value>Configuration Preview</value>
+  </data>
+  <data name="ConfigProfile_PreviewNoServer" xml:space="preserve">
+    <value>Select a server first. Its outbound configuration is required to build the preview.</value>
+  </data>
+  <data name="ConfigProfile_ExternalChangeWarning" xml:space="preserve">
+    <value>There are unsaved changes in this window, so the profile was not reloaded from disk. Saving will overwrite any external changes. To keep the disk version, close without saving and reopen the configuration profiles window.</value>
+  </data>
+  <data name="ConfigProfile_DiscardTitle" xml:space="preserve">
+    <value>Discard Unsaved Changes?</value>
+  </data>
+  <data name="ConfigProfile_DiscardMsg" xml:space="preserve">
+    <value>Unsaved edits to the configuration and its enabled state will be discarded. The saved profile and enabled state will not change. Continue without saving?</value>
+  </data>
+  <data name="ConfigProfile_ErrEmpty" xml:space="preserve">
+    <value>The configuration is empty. Enter a complete JSON configuration without outbounds.</value>
+  </data>
+  <data name="ConfigProfile_ErrRootMustBeObject" xml:space="preserve">
+    <value>The configuration root must be a JSON object.</value>
+  </data>
+  <data name="ConfigProfile_ErrOutboundsNotAllowed" xml:space="preserve">
+    <value>Remove the top-level outbounds section. XrayUI generates outbounds from the selected server.</value>
+  </data>
+  <data name="ConfigProfile_ErrInboundsMissing" xml:space="preserve">
+    <value>The configuration must contain a non-empty inbounds array.</value>
+  </data>
+  <data name="ConfigProfile_ErrTunInboundMissing" xml:space="preserve">
+    <value>A TUN mode profile must contain an inbound with protocol set to "tun".</value>
+  </data>
+  <data name="ConfigProfile_ErrTunInboundNotAllowed" xml:space="preserve">
+    <value>A system proxy profile must not contain an inbound with protocol set to "tun". Configure TUN in the TUN mode profile instead.</value>
+  </data>
+  <data name="ConfigProfile_WarnNoSystemProxyInbound" xml:space="preserve">
+    <value>No SOCKS, HTTP, or mixed inbound with an integer port was found. XrayUI will skip setting the system proxy for this profile.</value>
+  </data>
+  <data name="ConfigProfile_WarnNoAutoSystemRouting" xml:space="preserve">
+    <value>The TUN inbound has no non-empty autoSystemRoutingTable. Traffic may continue to use the physical network adapter unless you configure system routes manually.</value>
+  </data>
+  <data name="ConfigProfile_ErrTunNameMismatch" xml:space="preserve">
+    <value>The TUN inbound's settings.name must be "{0}" so XrayUI can clean up its routes and DNS settings correctly.</value>
+  </data>
+  <data name="ConfigProfile_WarnUnknownOutboundTag" xml:space="preserve">
+    <value>A routing rule references an unknown outbound tag. Tags generated by XrayUI: {0}. Check the outbound tags and any balancers declared in this profile.</value>
+  </data>
+  <data name="Error_ConfigProfileMissingMsg" xml:space="preserve">
+    <value>The enabled custom configuration profile could not be found: {0}. Restore the file, or disable the custom profile and save before connecting again. XrayUI will not silently switch to a generated configuration.</value>
+  </data>
+  <data name="ConfigProfile_Header.Text" xml:space="preserve">
+    <value>Configuration Profiles</value>
+  </data>
+  <data name="ConfigProfile_SlotProxy.Content" xml:space="preserve">
+    <value>System Proxy</value>
+  </data>
+  <data name="ConfigProfile_SlotTun.Content" xml:space="preserve">
+    <value>TUN Mode</value>
+  </data>
+  <data name="ConfigProfile_EnableTitle.Text" xml:space="preserve">
+    <value>Use custom configuration</value>
+  </data>
+  <data name="ConfigProfile_Subtitle.Text" xml:space="preserve">
+    <value>Do not include outbounds: they are generated from the selected server. Click Save to commit the configuration and enabled state; changes apply on the next connection in this mode.</value>
+  </data>
+  <data name="ConfigProfile_ResetBtn.Content" xml:space="preserve">
+    <value>Reset to Defaults</value>
+  </data>
+  <data name="ConfigProfile_SaveBtn.Content" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="ConfigProfile_CloseBtn.Content" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="TrayPanel_Connected" xml:space="preserve">
+    <value>Connected</value>
+  </data>
+  <data name="TrayPanel_OpenMain" xml:space="preserve">
+    <value>Open main window</value>
+  </data>
+  <data name="TrayPanel_Title.Text" xml:space="preserve">
+    <value>Quick Access</value>
+  </data>
+  <data name="TrayPanel_NodeLabel.Text" xml:space="preserve">
+    <value>Server</value>
+  </data>
+  <data name="TrayPanel_RoutingSmart.Content" xml:space="preserve">
+    <value>Smart Routing</value>
+  </data>
+  <data name="TrayPanel_RoutingGlobal.Content" xml:space="preserve">
+    <value>Global Routing</value>
+  </data>
+  <data name="TrayPanel_SystemProxyLabel.Text" xml:space="preserve">
+    <value>System Proxy</value>
+  </data>
+  <data name="TrayPanel_TunLabel.Text" xml:space="preserve">
+    <value>TUN</value>
+  </data>
+  <data name="JumpList_Title" xml:space="preserve">
+    <value>Taskbar Jump List</value>
+  </data>
+  <data name="JumpList_Recent" xml:space="preserve">
+    <value>Recent Connections</value>
+  </data>
+  <data name="JumpList_Unavailable" xml:space="preserve">
+    <value>The taskbar jump list is unavailable. Open the main window to select a server and connect.</value>
+  </data>
+  <data name="JumpList_ActivationFailed" xml:space="preserve">
+    <value>Could not open the requested connection from the taskbar jump list. Open the main window to check the server and connect again.</value>
+  </data>
+  <data name="RouteTest_ApiOwnedByProfile" xml:space="preserve">
+    <value>Route testing is unavailable: the custom configuration controls the API settings, and the running core does not expose XrayUI's route-test endpoint.</value>
+  </data>
+  <data name="RouteTest_InvalidInput" xml:space="preserve">
+    <value>Enter a valid domain, IP address, or URL, optionally with a port.</value>
+  </data>
+  <data name="RouteTest_NotRunning" xml:space="preserve">
+    <value>Start the proxy before testing routing.</value>
+  </data>
+  <data name="RouteTest_Failed" xml:space="preserve">
+    <value>Route test failed: {0}</value>
+  </data>
+  <data name="RouteTest_NoRuleMatched" xml:space="preserve">
+    <value>No routing rule matched. Default outbound: {0}</value>
+  </data>
+  <data name="RouteTest_OutboundTag" xml:space="preserve">
+    <value>Outbound tag: {0}</value>
+  </data>
+  <data name="Settings_InvalidTitle" xml:space="preserve">
+    <value>Could Not Load Settings</value>
+  </data>
+  <data name="Settings_InvalidMsg" xml:space="preserve">
+    <value>settings.json could not be loaded. Changes were not saved to avoid overwriting your existing settings with defaults. Check the file contents and access permissions, then try again.</value>
+  </data>
+  <data name="Personalize_ClearDataConfirmTitle" xml:space="preserve">
+    <value>Clear All Data?</value>
+  </data>
+  <data name="Personalize_ClearDataConfirmMsg" xml:space="preserve">
+    <value>This will permanently delete all servers, subscriptions, routing rules, custom configuration profiles, and recent connection history, reset all settings, and disable launch at startup. The app will restart when finished. This cannot be undone. Export a backup first. Continue?</value>
+  </data>
+  <data name="Personalize_ClearDataConfirmBtn" xml:space="preserve">
+    <value>Clear Data and Restart</value>
+  </data>
+  <data name="AddRule_PickerWaiting" xml:space="preserve">
+    <value>Waiting for selection...</value>
+  </data>
+  <data name="Subscription_GroupBox.Header" xml:space="preserve">
+    <value>Category / Group (optional)</value>
+  </data>
+  <data name="Subscription_GroupBox.PlaceholderText" xml:space="preserve">
+    <value>e.g. Local, Hong Kong, Backup</value>
+  </data>
+  <data name="Subscription_UrlBox.PlaceholderText" xml:space="preserve">
+    <value>https://...</value>
+  </data>
 </root>

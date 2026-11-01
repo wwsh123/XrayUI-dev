@@ -14,15 +14,15 @@ namespace XrayUI.Services
         Task<ServerEntry?> ShowChainProxyDialogAsync(IEnumerable<ServerEntry> servers, ServerEntry? existing = null);
         Task<(int port, bool allowLan)?> ShowEditPortDialogAsync(int currentPort, bool currentAllowLan);
         Task ShowErrorAsync(string title, string message, XamlRoot? xamlRoot = null);
-        Task<bool> ShowConfirmationAsync(string title, string message, string? confirmText = null, string? cancelText = null, bool isDanger = false);
+        Task<bool> ShowConfirmationAsync(string title, string message, string? confirmText = null, string? cancelText = null, bool isDanger = false, XamlRoot? xamlRoot = null);
         /// <summary>
         /// Shows the TUN confirmation dialog. Mutates <paramref name="settings"/>.TunMtu,
         /// <paramref name="settings"/>.TunOutboundInterface, and <paramref name="settings"/>.TunIpv6Enabled
         /// in-place on confirm. Returns true if the user confirmed (caller must persist), false if cancelled.
         /// </summary>
         Task<bool> ShowTunConfirmationDialogAsync(AppSettings settings);
-        Task ShowShareLinkDialogAsync(string serverName, string link);
         Task<(bool enabled, bool autoConnect)?> ShowStartupDialogAsync(bool currentEnabled, bool currentAutoConnect);
+        Task ShowShareLinkDialogAsync(string serverName, string link);
 
         /// <summary>
         /// Confirmation shown before an app update starts. Returns true when the

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.ComponentModel;
@@ -20,6 +21,14 @@ namespace XrayUI.Services
     public class DialogService : IDialogService
     {
         private readonly Func<XamlRoot?> _xamlRootFactory;
+
+        // Wrap and cap plain messages so short notices do not expand to the dialog's max width.
+        private static TextBlock CreateMessageText(string message) => new()
+        {
+            Text = message,
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 280,
+        };
 
         public DialogService(Func<XamlRoot?> xamlRootFactory)
         {
@@ -143,7 +152,7 @@ namespace XrayUI.Services
             var numAlterId = new NumberBox
                 { Header = "AlterId (VMess)", Value = existing?.AlterId ?? 0, Minimum = 0, Maximum = 65535 };
             var cmbNetwork = new ComboBox { Header = L.EditServer_Transport, MinWidth = 200 };
-            foreach (var n in new[] { "tcp", "ws", "grpc", "xhttp" })
+            foreach (var n in new[] { "tcp", "ws", "grpc", "httpupgrade", "xhttp" })
                 cmbNetwork.Items.Add(n);
             cmbNetwork.SelectedItem = existing?.Network ?? "tcp";
 
@@ -157,6 +166,7 @@ namespace XrayUI.Services
                 cmbXhttpMode.Items.Add(m);
             cmbXhttpMode.SelectedItem = XhttpSettings.NormalizeMode(existing?.XhttpMode);
             var txtXhttpExtra = CreateJsonTextBox("XHTTP Extra (JSON)", existing?.XhttpExtra);
+            var txtAlpn = new TextBox { Header = "ALPN (comma-separated, blank = Xray default)", Text = string.Join(',', existing?.Alpn ?? []) };
             var cmbSecurity = new ComboBox { Header = L.EditServer_Security, MinWidth = 200 };
             foreach (var s in new[] { "none", "tls", "reality" })
                 cmbSecurity.Items.Add(s);
@@ -235,6 +245,7 @@ namespace XrayUI.Services
             var rowWsHost = Wrap(txtWsHost);
             var rowXhttpMode = Wrap(cmbXhttpMode);
             var rowXhttpExtra = Wrap(txtXhttpExtra);
+            var rowAlpn = Wrap(txtAlpn);
             var rowSni = Wrap(txtSni);
             var rowFp = Wrap(txtFp);
             var rowAllowInsecure = Wrap(chkAllowInsecure);
@@ -272,6 +283,7 @@ namespace XrayUI.Services
                 bool hasWs = isStandardTransport && net == "ws";
                 bool hasXhttp = isStandardTransport && net == "xhttp";
                 bool hasGrpc = isStandardTransport && net == "grpc";
+                bool hasHttpUpgrade = isStandardTransport && net == "httpupgrade";
                 bool hasTls = isStandardTransport && (sec == "tls" || sec == "reality");
                 bool hasReality = isStandardTransport && sec == "reality";
                 bool hasEch = isVless && sec == "tls";
@@ -286,13 +298,14 @@ namespace XrayUI.Services
                     : Visibility.Collapsed;
                 rowUuid.Visibility = (isVmess || isVless) ? Visibility.Visible : Visibility.Collapsed;
                 rowAlterId.Visibility = isVmess ? Visibility.Visible : Visibility.Collapsed;
-                rowPath.Visibility = (hasWs || hasXhttp || hasGrpc) ? Visibility.Visible : Visibility.Collapsed;
-                rowWsHost.Visibility = (hasWs || hasXhttp) ? Visibility.Visible : Visibility.Collapsed;
+                rowPath.Visibility = (hasWs || hasXhttp || hasGrpc || hasHttpUpgrade) ? Visibility.Visible : Visibility.Collapsed;
+                rowWsHost.Visibility = (hasWs || hasXhttp || hasHttpUpgrade) ? Visibility.Visible : Visibility.Collapsed;
                 rowXhttpMode.Visibility = hasXhttp ? Visibility.Visible : Visibility.Collapsed;
                 rowXhttpExtra.Visibility = hasXhttp ? Visibility.Visible : Visibility.Collapsed;
                 rowSni.Visibility = (hasTls || isHysteria2) ? Visibility.Visible : Visibility.Collapsed;
                 rowFp.Visibility = hasTls ? Visibility.Visible : Visibility.Collapsed;
                 rowAllowInsecure.Visibility = (hasTls || isHysteria2) ? Visibility.Visible : Visibility.Collapsed;
+                rowAlpn.Visibility = hasTls ? Visibility.Visible : Visibility.Collapsed;
                 // Every TLS outbound can pin; REALITY cannot (it authenticates by public key and
                 // has no tlsSettings), so this tracks rowSni/rowAllowInsecure minus reality.
                 rowPinnedCert.Visibility = ((hasTls && !hasReality) || isHysteria2)
@@ -337,7 +350,7 @@ namespace XrayUI.Services
                 {
                     txtName, txtHost, numPort, cmbProtocol,
                     rowEncryption, rowUsername, rowPassword, rowUuid, rowAlterId,
-                    cmbNetwork, rowPath, rowWsHost, rowXhttpMode, rowXhttpExtra,
+                    cmbNetwork, rowPath, rowWsHost, rowXhttpMode, rowXhttpExtra, rowAlpn,
                     cmbSecurity, rowSni, rowFp, rowAllowInsecure, rowPinnedCert, rowEchConfigList, rowEchForceQuery,
                     rowPk, rowSid, rowSpx, rowFlow, rowVlessEncryption,
                     rowWgPrivateKey, rowWgPublicKey, rowWgPreSharedKey, rowWgLocalAddress, rowWgMtu, rowWgReserved,
@@ -383,6 +396,7 @@ namespace XrayUI.Services
             entry.WsHost = txtWsHost.Text.Trim();
             entry.XhttpMode = cmbXhttpMode.SelectedItem?.ToString() ?? string.Empty;
             entry.XhttpExtra = FinalmaskJson.NormalizeForStorage(txtXhttpExtra.Text);
+            entry.Alpn = txtAlpn.Text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
             entry.Security = cmbSecurity.SelectedItem?.ToString() ?? "none";
             entry.Sni = txtSni.Text.Trim();
             entry.Fingerprint = txtFp.Text.Trim();
@@ -1131,7 +1145,7 @@ namespace XrayUI.Services
         // ── Error ─────────────────────────────────────────────────────────────
 
         public async Task<bool> ShowConfirmationAsync(string title, string message, string? confirmText = null,
-            string? cancelText = null, bool isDanger = false)
+            string? cancelText = null, bool isDanger = false, XamlRoot? xamlRoot = null)
         {
             confirmText ??= L.Dialog_OK;
             cancelText  ??= L.Dialog_Cancel;
@@ -1145,6 +1159,7 @@ namespace XrayUI.Services
             var dialog = CreateDialog();
             dialog.Title = title;
             dialog.Content = content;
+            if (xamlRoot is not null) dialog.XamlRoot = xamlRoot;
             dialog.PrimaryButtonText = confirmText;
             dialog.CloseButtonText = cancelText;
             dialog.DefaultButton = isDanger ? ContentDialogButton.None : ContentDialogButton.Primary;
@@ -1425,7 +1440,7 @@ namespace XrayUI.Services
             await dialog.ShowAsync();
         }
 
-        // ── Startup ───────────────────────────────────────────────────────────
+        // ── App update confirm ────────────────────────────────────────────────
 
         public async Task<(bool enabled, bool autoConnect)?> ShowStartupDialogAsync(bool currentEnabled,
             bool currentAutoConnect)

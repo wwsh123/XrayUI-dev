@@ -19,6 +19,27 @@ public class AppSettingsRestoreStateTests
     }
 
     [Fact]
+    public void FailedLoadFallback_IsNeverPersisted()
+    {
+        var settings = new AppSettings { IsFailedLoadFallback = true };
+        var json = JsonSerializer.Serialize(settings, AppJsonSerializerContext.WriteReadable);
+        Assert.DoesNotContain("IsFailedLoadFallback", json);
+        var restored = JsonSerializer.Deserialize<AppSettings>(json, AppJsonSerializerContext.WriteReadable);
+        Assert.NotNull(restored);
+        Assert.False(restored.IsFailedLoadFallback);
+    }
+
+    [Fact]
+    public void FactoryResetImportGuard_RoundTripsJson()
+    {
+        var settings = new AppSettings { SkipInitialImport = true };
+        var json = JsonSerializer.Serialize(settings, AppJsonSerializerContext.WriteReadable);
+        var restored = JsonSerializer.Deserialize<AppSettings>(json, AppJsonSerializerContext.WriteReadable);
+        Assert.NotNull(restored);
+        Assert.True(restored.SkipInitialImport);
+    }
+
+    [Fact]
     public void AppSettings_RestoreState_RoundTripsJson()
     {
         var original = new AppSettings

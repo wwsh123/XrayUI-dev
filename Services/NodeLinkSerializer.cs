@@ -1,6 +1,7 @@
 using System;
 using System.Text;
 using System.Text.Json.Nodes;
+using System.Linq;
 using XrayUI.Models;
 
 namespace XrayUI.Services
@@ -70,6 +71,7 @@ namespace XrayUI.Services
                 ["tls"] = tls,
                 ["sni"] = s.Sni ?? string.Empty,
                 ["fp"] = s.Fingerprint ?? string.Empty,
+                ["alpn"] = s.Alpn is { Count: > 0 } ? string.Join(',', s.Alpn.Where(value => !string.IsNullOrWhiteSpace(value))) : string.Empty,
                 ["fm"] = FinalmaskJson.NormalizeForShare(s.Finalmask),
                 // IsTruthy("1") = true, IsTruthy("") = false — clean round-trip
                 ["allowInsecure"] = s.AllowInsecure ? "1" : ""
@@ -108,6 +110,8 @@ namespace XrayUI.Services
             {
                 AppendIfNotEmpty(sb, "sni", s.Sni);
                 AppendIfNotEmpty(sb, "fp",  s.Fingerprint);
+                if (s.Alpn is { Count: > 0 })
+                    AppendIfNotEmpty(sb, "alpn", string.Join(',', s.Alpn.Where(value => !string.IsNullOrWhiteSpace(value))));
                 if (s.AllowInsecure)
                     AppendParam(sb, "allowInsecure", "1", first: false);
             }
@@ -127,10 +131,10 @@ namespace XrayUI.Services
             }
 
             // Transport params
-            if (network == "ws" || network == "grpc" || network == "xhttp")
+            if (network == "ws" || network == "grpc" || network == "httpupgrade" || network == "xhttp")
                 AppendIfNotEmpty(sb, "path", s.Path);
 
-            if (network == "ws" || network == "xhttp")
+            if (network == "ws" || network == "httpupgrade" || network == "xhttp")
                 AppendIfNotEmpty(sb, "host", s.WsHost);
 
             if (network == "xhttp")
@@ -256,6 +260,7 @@ namespace XrayUI.Services
                             || security != "tls"
                             || !string.IsNullOrEmpty(s.Sni)
                             || !string.IsNullOrEmpty(s.Fingerprint)
+                            || s.Alpn is { Count: > 0 }
                             || s.AllowInsecure
                             || !string.IsNullOrEmpty(s.Path)
                             || !string.IsNullOrEmpty(s.WsHost)
@@ -283,6 +288,8 @@ namespace XrayUI.Services
                     AddParam("security", security);
                 AddIfNotEmpty("sni", s.Sni);
                 AddIfNotEmpty("fp", s.Fingerprint);
+                if (s.Alpn is { Count: > 0 })
+                    AddIfNotEmpty("alpn", string.Join(',', s.Alpn.Where(value => !string.IsNullOrWhiteSpace(value))));
                 if (s.AllowInsecure)
                     AddParam("allowInsecure", "1");
 
@@ -291,7 +298,7 @@ namespace XrayUI.Services
                 else
                     AddIfNotEmpty("path", s.Path);
 
-                if (network == "ws")
+                if (network == "ws" || network == "httpupgrade")
                     AddIfNotEmpty("host", s.WsHost);
                 AddIfNotEmpty("fm", finalmask);
             }

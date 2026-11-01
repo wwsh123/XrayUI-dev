@@ -120,6 +120,7 @@ namespace XrayUI.Services
         {
             if (Transport(p) is not { } t) return null;
             var reality = Map(p, "reality-opts");
+            var xhttp = Map(p, "xhttp-opts") ?? Map(p, "splithttp-opts");
             bool tls = Bool(p, "tls");
             string security = reality is not null ? "reality" : tls ? "tls" : "none";
             return new ServerEntry
@@ -139,6 +140,8 @@ namespace XrayUI.Services
                 SpiderX       = reality is null ? string.Empty : Str(reality, "spider-x"),
                 Path          = t.path,
                 WsHost        = t.wsHost,
+                XhttpMode     = xhttp is null ? string.Empty : Str(xhttp, "mode"),
+                XhttpExtra    = xhttp is null ? string.Empty : Str(xhttp, "extra"),
                 Flow          = Str(p, "flow"),
                 Encryption    = security == "reality" ? "Reality"
                               : security == "tls"     ? "TLS"
@@ -149,6 +152,7 @@ namespace XrayUI.Services
         private static ServerEntry? MapTrojan(YamlMappingNode p)
         {
             if (Transport(p) is not { } t) return null;
+            var xhttp = Map(p, "xhttp-opts") ?? Map(p, "splithttp-opts");
             return new ServerEntry
             {
                 Name          = Str(p, "name"),
@@ -163,6 +167,8 @@ namespace XrayUI.Services
                 AllowInsecure = Bool(p, "skip-cert-verify"),
                 Path          = t.path,
                 WsHost        = t.wsHost,
+                XhttpMode     = xhttp is null ? string.Empty : Str(xhttp, "mode"),
+                XhttpExtra    = xhttp is null ? string.Empty : Str(xhttp, "extra"),
                 Encryption    = "TLS",
             };
         }
@@ -285,6 +291,14 @@ namespace XrayUI.Services
                     var grpc = Map(p, "grpc-opts");
                     var serviceName = grpc is null ? string.Empty : Str(grpc, "grpc-service-name");
                     return ("grpc", serviceName, string.Empty);
+                }
+                case "xhttp":
+                case "splithttp":
+                {
+                    var xhttp = Map(p, "xhttp-opts") ?? Map(p, "splithttp-opts");
+                    return ("xhttp",
+                        xhttp is null ? string.Empty : Str(xhttp, "path"),
+                        xhttp is null ? string.Empty : Str(xhttp, "host"));
                 }
                 default:
                     return null;

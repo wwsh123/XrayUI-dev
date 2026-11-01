@@ -1435,4 +1435,196 @@
   <data name="Traffic_EmptyPending" xml:space="preserve"><value>页面已就绪。接入流量采集后将显示地址和图表。</value></data>
   <data name="Traffic_EmptyFilter" xml:space="preserve"><value>没有符合筛选条件的访问记录。</value></data>
   <data name="Traffic_Empty" xml:space="preserve"><value>暂无访问记录。此处仅显示经过 Xray 的流量。</value></data>
+  <data name="ConfigProfile_Title" xml:space="preserve">
+    <value>配置文件</value>
+  </data>
+  <data name="ConfigProfile_OpenFolderTooltip" xml:space="preserve">
+    <value>打开配置文件夹</value>
+  </data>
+  <data name="ConfigProfile_PreviewTooltip" xml:space="preserve">
+    <value>预览下次连接使用的配置</value>
+  </data>
+  <data name="ConfigProfile_EditorAutomationName" xml:space="preserve">
+    <value>自定义配置 JSON 编辑器，不含 outbounds</value>
+  </data>
+  <data name="ConfigProfile_LoadFailed" xml:space="preserve">
+    <value>无法加载配置文件或设置。请检查文件及访问权限后重试。</value>
+  </data>
+  <data name="ConfigProfile_SaveFailedTitle" xml:space="preserve">
+    <value>保存配置文件失败</value>
+  </data>
+  <data name="ConfigProfile_SettingsUnwritable" xml:space="preserve">
+    <value>配置文件已保存，但无法将启用状态保存到 settings.json。请检查设置文件及访问权限后重新保存。此前保存的启用状态仍然有效。</value>
+  </data>
+  <data name="ConfigProfile_Saved" xml:space="preserve">
+    <value>已保存并启用，下次以此模式连接时将使用该配置，当前连接不变。组装后的配置能否运行，将由 Xray 在启动时检查。</value>
+  </data>
+  <data name="ConfigProfile_SavedInactive" xml:space="preserve">
+    <value>已保存，但未启用自定义配置。此模式下的连接将使用自动生成的配置，当前连接不变。</value>
+  </data>
+  <data name="ConfigProfile_ResetTitle" xml:space="preserve">
+    <value>将编辑器重置为默认配置？</value>
+  </data>
+  <data name="ConfigProfile_ResetMsg" xml:space="preserve">
+    <value>此操作将用默认模板替换当前模式的编辑器内容，包括尚未保存的修改。点击「保存」前，不会更改已保存的文件或启用状态。是否继续？</value>
+  </data>
+  <data name="ConfigProfile_PreviewStaleTitle" xml:space="preserve">
+    <value>请先保存修改再预览</value>
+  </data>
+  <data name="ConfigProfile_PreviewStaleMsg" xml:space="preserve">
+    <value>预览使用已保存的配置和启用状态，不包含此窗口中尚未保存的修改。请先保存修改，再重新预览。</value>
+  </data>
+  <data name="ConfigProfile_PreviewTitle" xml:space="preserve">
+    <value>配置预览</value>
+  </data>
+  <data name="ConfigProfile_PreviewNoServer" xml:space="preserve">
+    <value>请先选择一个节点，预览需要根据该节点生成出站配置。</value>
+  </data>
+  <data name="ConfigProfile_ExternalChangeWarning" xml:space="preserve">
+    <value>此窗口中有尚未保存的修改，因此未从磁盘重新加载配置。保存将覆盖外部修改。如需保留磁盘版本，请不保存并关闭窗口，然后重新打开配置文件窗口。</value>
+  </data>
+  <data name="ConfigProfile_DiscardTitle" xml:space="preserve">
+    <value>丢弃未保存的修改？</value>
+  </data>
+  <data name="ConfigProfile_DiscardMsg" xml:space="preserve">
+    <value>尚未保存的配置内容及启用状态修改将被丢弃。已保存的配置文件和启用状态不会改变。是否不保存并继续？</value>
+  </data>
+  <data name="ConfigProfile_ErrEmpty" xml:space="preserve">
+    <value>配置内容为空。请输入不含 outbounds 的完整 JSON 配置。</value>
+  </data>
+  <data name="ConfigProfile_ErrRootMustBeObject" xml:space="preserve">
+    <value>配置的根节点必须是 JSON 对象。</value>
+  </data>
+  <data name="ConfigProfile_ErrOutboundsNotAllowed" xml:space="preserve">
+    <value>请移除顶层 outbounds 字段。XrayUI 会根据选中的节点生成出站配置。</value>
+  </data>
+  <data name="ConfigProfile_ErrInboundsMissing" xml:space="preserve">
+    <value>配置必须包含非空的 inbounds 数组。</value>
+  </data>
+  <data name="ConfigProfile_ErrTunInboundMissing" xml:space="preserve">
+    <value>TUN 模式配置必须包含 protocol 为 "tun" 的入站。</value>
+  </data>
+  <data name="ConfigProfile_ErrTunInboundNotAllowed" xml:space="preserve">
+    <value>系统代理配置不能包含 protocol 为 "tun" 的入站。请在 TUN 模式配置中设置 TUN 入站。</value>
+  </data>
+  <data name="ConfigProfile_WarnNoSystemProxyInbound" xml:space="preserve">
+    <value>未找到端口为整数的 SOCKS、HTTP 或 mixed 入站。使用此配置时，XrayUI 将跳过设置系统代理。</value>
+  </data>
+  <data name="ConfigProfile_WarnNoAutoSystemRouting" xml:space="preserve">
+    <value>TUN 入站未设置非空的 autoSystemRoutingTable。除非手动配置系统路由，否则流量可能继续经物理网卡传输。</value>
+  </data>
+  <data name="ConfigProfile_ErrTunNameMismatch" xml:space="preserve">
+    <value>TUN 入站的 settings.name 必须为 "{0}"，以便 XrayUI 正确清理路由和 DNS 设置。</value>
+  </data>
+  <data name="ConfigProfile_WarnUnknownOutboundTag" xml:space="preserve">
+    <value>路由规则引用了未知的出站标签。XrayUI 生成的出站标签为：{0}。请检查出站标签及此配置中定义的负载均衡器。</value>
+  </data>
+  <data name="Error_ConfigProfileMissingMsg" xml:space="preserve">
+    <value>找不到已启用的自定义配置文件：{0}。请恢复该文件，或关闭自定义配置并保存后再连接。XrayUI 不会自动改用生成的配置。</value>
+  </data>
+  <data name="ConfigProfile_Header.Text" xml:space="preserve">
+    <value>配置文件</value>
+  </data>
+  <data name="ConfigProfile_SlotProxy.Content" xml:space="preserve">
+    <value>系统代理</value>
+  </data>
+  <data name="ConfigProfile_SlotTun.Content" xml:space="preserve">
+    <value>TUN 模式</value>
+  </data>
+  <data name="ConfigProfile_EnableTitle.Text" xml:space="preserve">
+    <value>使用自定义配置</value>
+  </data>
+  <data name="ConfigProfile_Subtitle.Text" xml:space="preserve">
+    <value>不要写 outbounds：出站由选中的节点生成。点击「保存」才会提交配置和启用状态，并在下次以此模式连接时生效。</value>
+  </data>
+  <data name="ConfigProfile_ResetBtn.Content" xml:space="preserve">
+    <value>重置为默认</value>
+  </data>
+  <data name="ConfigProfile_SaveBtn.Content" xml:space="preserve">
+    <value>保存</value>
+  </data>
+  <data name="ConfigProfile_CloseBtn.Content" xml:space="preserve">
+    <value>关闭</value>
+  </data>
+  <data name="TrayPanel_Connected" xml:space="preserve">
+    <value>已连接</value>
+  </data>
+  <data name="TrayPanel_OpenMain" xml:space="preserve">
+    <value>打开主窗口</value>
+  </data>
+  <data name="TrayPanel_Title.Text" xml:space="preserve">
+    <value>快速访问</value>
+  </data>
+  <data name="TrayPanel_NodeLabel.Text" xml:space="preserve">
+    <value>节点</value>
+  </data>
+  <data name="TrayPanel_RoutingSmart.Content" xml:space="preserve">
+    <value>智能分流</value>
+  </data>
+  <data name="TrayPanel_RoutingGlobal.Content" xml:space="preserve">
+    <value>全局路由</value>
+  </data>
+  <data name="TrayPanel_SystemProxyLabel.Text" xml:space="preserve">
+    <value>系统代理</value>
+  </data>
+  <data name="TrayPanel_TunLabel.Text" xml:space="preserve">
+    <value>TUN</value>
+  </data>
+  <data name="JumpList_Title" xml:space="preserve">
+    <value>任务栏跳转列表</value>
+  </data>
+  <data name="JumpList_Recent" xml:space="preserve">
+    <value>最近连接</value>
+  </data>
+  <data name="JumpList_Unavailable" xml:space="preserve">
+    <value>任务栏跳转列表不可用。请打开主窗口选择节点并连接。</value>
+  </data>
+  <data name="JumpList_ActivationFailed" xml:space="preserve">
+    <value>无法从任务栏跳转列表打开指定连接。请打开主窗口检查节点后重新连接。</value>
+  </data>
+  <data name="RouteTest_ApiOwnedByProfile" xml:space="preserve">
+    <value>路由测试不可用：自定义配置接管了 API 设置，当前运行的内核未提供 XrayUI 的路由测试接口。</value>
+  </data>
+  <data name="RouteTest_InvalidInput" xml:space="preserve">
+    <value>请输入有效的域名、IP 地址或 URL，可附带端口。</value>
+  </data>
+  <data name="RouteTest_NotRunning" xml:space="preserve">
+    <value>请先启动代理，再测试路由。</value>
+  </data>
+  <data name="RouteTest_Failed" xml:space="preserve">
+    <value>路由测试失败：{0}</value>
+  </data>
+  <data name="RouteTest_NoRuleMatched" xml:space="preserve">
+    <value>未匹配任何路由规则。默认出站：{0}</value>
+  </data>
+  <data name="RouteTest_OutboundTag" xml:space="preserve">
+    <value>出站标签：{0}</value>
+  </data>
+  <data name="Settings_InvalidTitle" xml:space="preserve">
+    <value>无法加载设置</value>
+  </data>
+  <data name="Settings_InvalidMsg" xml:space="preserve">
+    <value>无法加载 settings.json。为避免用默认设置覆盖已有设置，此次修改未保存。请检查文件内容及访问权限后重试。</value>
+  </data>
+  <data name="Personalize_ClearDataConfirmTitle" xml:space="preserve">
+    <value>清空全部数据？</value>
+  </data>
+  <data name="Personalize_ClearDataConfirmMsg" xml:space="preserve">
+    <value>此操作将永久删除所有节点、订阅、路由规则、自定义配置文件和最近连接记录，恢复全部设置并关闭开机启动。完成后应用将重启。此操作不可撤销，请先导出备份。是否继续？</value>
+  </data>
+  <data name="Personalize_ClearDataConfirmBtn" xml:space="preserve">
+    <value>清空数据并重启</value>
+  </data>
+  <data name="AddRule_PickerWaiting" xml:space="preserve">
+    <value>等待选择...</value>
+  </data>
+  <data name="Subscription_GroupBox.Header" xml:space="preserve">
+    <value>分类 / 分组（可选）</value>
+  </data>
+  <data name="Subscription_GroupBox.PlaceholderText" xml:space="preserve">
+    <value>例如：国内、香港、备用</value>
+  </data>
+  <data name="Subscription_UrlBox.PlaceholderText" xml:space="preserve">
+    <value>https://...</value>
+  </data>
 </root>

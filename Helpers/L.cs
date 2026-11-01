@@ -303,4 +303,55 @@ public static class L
     public static string Chain_EndpointMissing   => Loc.GetString("Chain_EndpointMissing");
     public static string Chain_NoNesting         => Loc.GetString("Chain_NoNesting");
     public static string Tun_PreflightErrorTitle => Loc.GetString("Tun_PreflightErrorTitle");
+
+    // ── 自定义配置文件 ──────────────────────────────────────────────────────
+    public static string ConfigProfile_Title                    => Loc.GetString("ConfigProfile_Title");
+    public static string ConfigProfile_OpenFolderTooltip        => Loc.GetString("ConfigProfile_OpenFolderTooltip");
+    public static string ConfigProfile_PreviewTooltip           => Loc.GetString("ConfigProfile_PreviewTooltip");
+    public static string ConfigProfile_EditorAutomationName     => Loc.GetString("ConfigProfile_EditorAutomationName");
+    public static string ConfigProfile_LoadFailed               => Loc.GetString("ConfigProfile_LoadFailed");
+    public static string ConfigProfile_SaveFailedTitle          => Loc.GetString("ConfigProfile_SaveFailedTitle");
+    public static string ConfigProfile_SettingsUnwritable       => Loc.GetString("ConfigProfile_SettingsUnwritable");
+    public static string ConfigProfile_Saved                    => Loc.GetString("ConfigProfile_Saved");
+    public static string ConfigProfile_SavedInactive            => Loc.GetString("ConfigProfile_SavedInactive");
+    public static string ConfigProfile_ResetTitle               => Loc.GetString("ConfigProfile_ResetTitle");
+    public static string ConfigProfile_ResetMsg                 => Loc.GetString("ConfigProfile_ResetMsg");
+    public static string ConfigProfile_PreviewStaleTitle        => Loc.GetString("ConfigProfile_PreviewStaleTitle");
+    public static string ConfigProfile_PreviewStaleMsg          => Loc.GetString("ConfigProfile_PreviewStaleMsg");
+    public static string ConfigProfile_PreviewTitle             => Loc.GetString("ConfigProfile_PreviewTitle");
+    public static string ConfigProfile_PreviewNoServer          => Loc.GetString("ConfigProfile_PreviewNoServer");
+    public static string ConfigProfile_ExternalChangeWarning    => Loc.GetString("ConfigProfile_ExternalChangeWarning");
+    public static string ConfigProfile_DiscardTitle             => Loc.GetString("ConfigProfile_DiscardTitle");
+    public static string ConfigProfile_DiscardMsg               => Loc.GetString("ConfigProfile_DiscardMsg");
+    public static string ConfigProfile_ErrEmpty                 => Loc.GetString("ConfigProfile_ErrEmpty");
+    public static string ConfigProfile_ErrRootMustBeObject      => Loc.GetString("ConfigProfile_ErrRootMustBeObject");
+    public static string ConfigProfile_ErrOutboundsNotAllowed   => Loc.GetString("ConfigProfile_ErrOutboundsNotAllowed");
+    public static string ConfigProfile_ErrInboundsMissing       => Loc.GetString("ConfigProfile_ErrInboundsMissing");
+    public static string ConfigProfile_ErrTunInboundMissing     => Loc.GetString("ConfigProfile_ErrTunInboundMissing");
+    public static string ConfigProfile_ErrTunInboundNotAllowed  => Loc.GetString("ConfigProfile_ErrTunInboundNotAllowed");
+    public static string ConfigProfile_WarnNoSystemProxyInbound => Loc.GetString("ConfigProfile_WarnNoSystemProxyInbound");
+    public static string ConfigProfile_WarnNoAutoSystemRouting  => Loc.GetString("ConfigProfile_WarnNoAutoSystemRouting");
+
+    // ── 托盘面板与任务栏跳转列表 ────────────────────────────────────────────
+    public static string TrayPanel_Connected       => Loc.GetString("TrayPanel_Connected");
+    public static string TrayPanel_OpenMain        => Loc.GetString("TrayPanel_OpenMain");
+    public static string JumpList_Title            => Loc.GetString("JumpList_Title");
+    public static string JumpList_Recent           => Loc.GetString("JumpList_Recent");
+    public static string JumpList_Unavailable      => Loc.GetString("JumpList_Unavailable");
+    public static string JumpList_ActivationFailed => Loc.GetString("JumpList_ActivationFailed");
+
+    // ── 路由测试 ────────────────────────────────────────────────────────────
+    public static string RouteTest_ApiOwnedByProfile => Loc.GetString("RouteTest_ApiOwnedByProfile");
+    public static string RouteTest_InvalidInput      => Loc.GetString("RouteTest_InvalidInput");
+    public static string RouteTest_NotRunning        => Loc.GetString("RouteTest_NotRunning");
+
+    // ── 设置保存与清空数据 ──────────────────────────────────────────────────
+    public static string Settings_InvalidTitle               => Loc.GetString("Settings_InvalidTitle");
+    public static string Settings_InvalidMsg                 => Loc.GetString("Settings_InvalidMsg");
+    public static string Personalize_ClearDataConfirmTitle    => Loc.GetString("Personalize_ClearDataConfirmTitle");
+    public static string Personalize_ClearDataConfirmMsg      => Loc.GetString("Personalize_ClearDataConfirmMsg");
+    public static string Personalize_ClearDataConfirmBtn      => Loc.GetString("Personalize_ClearDataConfirmBtn");
+
+    // ── 规则文件选择 ────────────────────────────────────────────────────────
+    public static string AddRule_PickerWaiting => Loc.GetString("AddRule_PickerWaiting");
 }

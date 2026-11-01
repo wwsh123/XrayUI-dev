@@ -1,3 +1,4 @@
+﻿using System;
 using System.Collections.Generic;
 using System.Text.Json.Nodes;
 using XrayUI.Services;
@@ -7,6 +8,12 @@ namespace XrayUI.Models
     public class AppSettings
     {
         public int LocalMixedPort { get; set; } = 16891;
+        public bool SkipInitialImport { get; set; }
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool IsFailedLoadFallback { get; set; }
+        /// <summary>Compatibility aliases used by the profile editor tests and config-profile state APIs.</summary>
+        public bool UseTunConfigProfile { get; set; }
+        public bool UseProxyConfigProfile { get; set; }
         /// <summary>When true, enables multi-node concurrency mode allowing auxiliary servers to listen on dedicated ports.</summary>
         public bool EnableMultiNodeRouting { get; set; } = false;
         /// <summary>When true, the local socks/http inbound listens on 0.0.0.0 instead of

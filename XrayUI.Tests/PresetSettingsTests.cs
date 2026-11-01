@@ -1,6 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using XrayUI.Models;
+using XrayUI.Services;
 
 namespace XrayUI.Tests;
 
@@ -26,7 +27,7 @@ public class PresetSettingsTests
                 new CustomRoutingRule
                 {
                     Type = "process",
-                    Process = "chrome.exe",
+                    Process = ["chrome.exe"],
                     OutboundTag = "proxy"
                 }
             ],
@@ -51,7 +52,11 @@ public class PresetSettingsTests
         Assert.Contains("\"Subscriptions\"", json);
         Assert.Contains("\"CustomRules\"", json);
         Assert.Contains("\"CloudflareAccounts\"", json);
-        Assert.Contains("\"AccountTag\":\"abc123\"", json);
-        Assert.Contains("\"ApiToken\":\"token-123\"", json);
+
+        using var document = JsonDocument.Parse(json);
+        var account = document.RootElement
+            .GetProperty("CloudflareAccounts")[0];
+        Assert.Equal("abc123", account.GetProperty("AccountTag").GetString());
+        Assert.Equal("token-123", account.GetProperty("ApiToken").GetString());
     }
 }

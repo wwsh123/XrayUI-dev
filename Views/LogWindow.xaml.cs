@@ -1,12 +1,14 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml.Documents;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Windows.ApplicationModel.DataTransfer;
+using VirtualKey = Windows.System.VirtualKey;
 using WinUIEx;
 using XrayUI.Helpers;
 using XrayUI.Models;
@@ -30,6 +32,8 @@ namespace XrayUI.Views
         private readonly Func<Task> _reapplyConfigAsync;
         private readonly DispatcherQueue _queue;
         private readonly DispatcherQueueTimer _flushTimer;
+        private int _routeTestGeneration;
+        private bool _isClosed;
 
         // Set from background thread when new lines arrive; consumed on UI thread.
         private volatile bool _dirty;
@@ -83,6 +87,7 @@ namespace XrayUI.Views
             RefreshTimestampBrush();
             RenderLog();
             UpdateStatus();
+            ResetRouteTest();
             _ = InitializeLogSettingsMenuAsync();
 
             _flushTimer = _queue.CreateTimer();
@@ -98,6 +103,8 @@ namespace XrayUI.Views
 
         private void OnClosed(object sender, WindowEventArgs args)
         {
+            _isClosed = true;
+            _routeTestGeneration++;
             _flushTimer.Stop();
             _xray.LogReceived    -= OnLogReceived;
             _xray.RunningChanged -= OnRunningChanged;
@@ -119,6 +126,8 @@ namespace XrayUI.Views
             // instance, so a full re-render is required.
             _queue.TryEnqueue(() =>
             {
+                if (_isClosed) return;
+
                 RefreshTimestampBrush();
                 var offset = LogScrollViewer.VerticalOffset;
                 RenderLog(forceRebuild: true);
@@ -134,12 +143,18 @@ namespace XrayUI.Views
 
         private void OnRunningChanged(object? sender, bool running)
         {
-            _queue.TryEnqueue(UpdateStatus);
+            _queue.TryEnqueue(() =>
+            {
+                if (_isClosed) return;
+
+                UpdateStatus();
+                ResetRouteTest();
+            });
         }
 
         private void OnFlushTick(DispatcherQueueTimer sender, object args)
         {
-            if (!_dirty) return;
+            if (_isClosed || !_dirty) return;
             _dirty = false;
 
             var autoScroll = AutoScrollToggle.IsChecked == true;
@@ -279,12 +294,16 @@ namespace XrayUI.Views
             try
             {
                 var settings = await _settings.LoadSettingsAsync();
+                if (_isClosed) return;
+
                 SetMaskAddressSelection(LogMaskAddress.Normalize(settings.LogMaskAddress));
                 SetLogLevelSelection(XrayLogLevel.Normalize(settings.XrayLogLevel));
                 SetDnsLogSelection(settings.DnsLog);
             }
             catch
             {
+                if (_isClosed) return;
+
                 SetMaskAddressSelection(LogMaskAddress.Off);
                 SetLogLevelSelection(XrayLogLevel.Warning);
                 SetDnsLogSelection(false);
@@ -318,6 +337,123 @@ namespace XrayUI.Views
             StatusText.Text = running ? L.Log_Running : L.Log_NotRunning;
             StatusDot.Fill  = running ? RunningBrush : StoppedBrush;
         }
+
+        // ── Route test ─────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Enables the tester only while a core that exposes the route-test API is running, and
+        /// drops any shown result: it described the rules of a core that is gone. The typed
+        /// target stays, so a test can be rerun right after a reapply.
+        /// </summary>
+        private void ResetRouteTest()
+        {
+            if (_isClosed) return;
+
+            _routeTestGeneration++;
+
+            var running   = _xray.IsRunning;
+            var available = running && _xray.RouteTest is not null;
+            RouteTestInput.IsEnabled     = available;
+            RouteTestRunButton.IsEnabled = available;
+
+            ShowRouteTestState(null, available
+                ? null
+                : running ? L.RouteTest_ApiOwnedByProfile : L.RouteTest_NotRunning);
+        }
+
+        private async Task RunRouteTestAsync()
+        {
+            if (_isClosed) return;
+
+            // The run button doubles as the busy flag: it is disabled while a test is in flight,
+            // and the input (hence Enter) is disabled whenever the tester is unavailable.
+            var endpoint = _xray.RouteTest;
+            if (!RouteTestRunButton.IsEnabled || !_xray.IsRunning || endpoint is null) return;
+
+            if (!RouteTestProtocol.TryParseTarget(RouteTestInput.Text, out var target))
+            {
+                ShowRouteTestState(null, L.RouteTest_InvalidInput);
+                return;
+            }
+
+            var generation = _routeTestGeneration;
+            RouteTestRunButton.IsEnabled = false;
+            ShowRouteTestState(null, null, busy: true);
+
+            var result = await RouteTestService.TestAsync(endpoint, target);
+            // 运行状态事件可能仍在队列中；同时核对端点实例，避免旧核心结果回写。
+            if (_isClosed || generation != _routeTestGeneration ||
+                !_xray.IsRunning || !ReferenceEquals(endpoint, _xray.RouteTest)) return;
+
+            RouteTestRunButton.IsEnabled = true;
+            ShowRouteTestResult(result);
+        }
+
+        private void ShowRouteTestResult(RouteTestResult result)
+        {
+            if (result.Outcome == RouteTestOutcome.Failed)
+            {
+                ShowRouteTestState(null, Loc.Format("RouteTest_Failed", result.Detail));
+                return;
+            }
+
+            var tag = result.Detail;
+            var kind = RouteTestProtocol.Classify(tag);
+            FrameworkElement badge = kind switch
+            {
+                RouteTestOutboundKind.Proxy  => RouteTestProxyBadge,
+                RouteTestOutboundKind.Direct => RouteTestDirectBadge,
+                RouteTestOutboundKind.Block  => RouteTestBlockBadge,
+                _                            => RouteTestOtherBadge,
+            };
+            // A tag XrayUI did not name (e.g. a balancer's pick) is its own badge label.
+            RouteTestOtherText.Text = tag;
+
+            var detail = result.Outcome == RouteTestOutcome.NoRuleMatched
+                ? Loc.Format("RouteTest_NoRuleMatched", tag)
+                : kind == RouteTestOutboundKind.Other ? null : Loc.Format("RouteTest_OutboundTag", tag);
+            ShowRouteTestState(badge, detail);
+        }
+
+        /// <param name="badge">The outcome badge to show, or null for none.</param>
+        private void ShowRouteTestState(FrameworkElement? badge, string? detail, bool busy = false)
+        {
+            var hasMarker = busy || badge is not null;
+
+            RouteTestProgress.IsActive   = busy;
+            RouteTestProgress.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+            foreach (var element in new FrameworkElement[]
+                     { RouteTestProxyBadge, RouteTestDirectBadge, RouteTestBlockBadge, RouteTestOtherBadge })
+            {
+                element.Visibility = element == badge ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            // ColumnSpacing applies even when the badge column is empty, which would indent a
+            // message-only row against the input above it.
+            RouteTestResultRow.ColumnSpacing = hasMarker ? 8 : 0;
+            RouteTestDetail.Text = detail ?? string.Empty;
+            RouteTestResultRow.Visibility = hasMarker || !string.IsNullOrEmpty(detail)
+                ? Visibility.Visible
+                : Visibility.Collapsed;
+        }
+
+        private void RouteTestFlyout_Opened(object sender, object e)
+        {
+            if (_isClosed || !RouteTestInput.IsEnabled) return;
+
+            RouteTestInput.Focus(FocusState.Programmatic);
+            RouteTestInput.SelectAll();
+        }
+
+        private void RouteTestInput_KeyDown(object sender, KeyRoutedEventArgs e)
+        {
+            if (e.Key != VirtualKey.Enter) return;
+
+            e.Handled = true;
+            _ = RunRouteTestAsync();
+        }
+
+        private void RouteTestRunButton_Click(object sender, RoutedEventArgs e) => _ = RunRouteTestAsync();
 
         // ── Button handlers ────────────────────────────────────────────────────
 
@@ -440,6 +576,8 @@ namespace XrayUI.Views
 
         private async Task ShowInfoAsync(string title, string message)
         {
+            if (_isClosed) return;
+
             var dialog = new ContentDialog
             {
                 XamlRoot = Content.XamlRoot,

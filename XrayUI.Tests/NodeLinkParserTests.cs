@@ -297,6 +297,20 @@ namespace XrayUI.Tests
         }
 
         [Fact]
+        public void Parse_VlessSplitHttp_NormalizesToXhttp()
+        {
+            var s = NodeLinkParser.Parse("vless://u@x.example.com:443?type=splithttp&security=tls&path=%2Fxh&host=cdn.example.com&mode=stream-up&extra=%7B%22xPaddingBytes%22%3A%22100-200%22%7D#xhttp");
+
+            Assert.NotNull(s);
+            Assert.Equal("xhttp", s.Network);
+            Assert.Equal("/xh", s.Path);
+            Assert.Equal("cdn.example.com", s.WsHost);
+            Assert.Equal("stream-up", s.XhttpMode);
+            Assert.Contains("xPaddingBytes", s.XhttpExtra);
+            Assert.Contains("100-200", s.XhttpExtra);
+        }
+
+        [Fact]
         public void Parse_TrojanEmptyPassword_ReturnsNull()
         {
             Assert.Null(NodeLinkParser.Parse("trojan://@t.example.com:443#T"));

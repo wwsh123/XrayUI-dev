@@ -1,7 +1,5 @@
 ﻿using System;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
-using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml.Media;
 using WinUIEx;
@@ -12,14 +10,6 @@ namespace XrayUI.Views
 {
     public sealed partial class CustomRulesWindow
     {
-        private const int GWLP_HWNDPARENT = -8;
-
-        [DllImport("User32.dll", CharSet = CharSet.Auto, EntryPoint = "SetWindowLongPtr")]
-        private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
-
-        [DllImport("User32.dll", CharSet = CharSet.Auto, EntryPoint = "SetWindowLong")]
-        private static extern IntPtr SetWindowLong(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
-
         private readonly Window _owner;
 
         public CustomRulesViewModel ViewModel { get; }
@@ -41,12 +31,12 @@ namespace XrayUI.Views
 
             ToolTipService.SetToolTip(OpenAdvancedEditorButton, L.CustomRules_AdvancedEditorTooltip);
 
-			var presenter = OverlappedPresenter.CreateForDialog();
+            ToolTipService.SetToolTip(OpenAdvancedEditorButton, L.CustomRules_AdvancedEditorTooltip);
 
-            // 1. Set Win32 owner BEFORE IsModal — IsModal requires an owner.
-            SetWindowOwner(owner);
+            this.ShowAsOwnedModal(owner);
 
             // 2. Mark presenter modal, then commit it to the AppWindow.
+            var presenter = (OverlappedPresenter)AppWindow.Presenter;
             presenter.IsModal = true;
             AppWindow.SetPresenter(presenter);
 
@@ -146,17 +136,6 @@ namespace XrayUI.Views
         {
             if (sender is FrameworkElement { DataContext: CustomRoutingRule rule })
                 ViewModel.DeleteRuleCommand.Execute(rule);
-        }
-
-        private void SetWindowOwner(Window owner)
-        {
-            var ownerHwnd = WinRT.Interop.WindowNative.GetWindowHandle(owner);
-            var ownedHwnd = Win32Interop.GetWindowFromWindowId(AppWindow.Id);
-
-            if (IntPtr.Size == 8)
-                SetWindowLongPtr(ownedHwnd, GWLP_HWNDPARENT, ownerHwnd);
-            else
-                SetWindowLong(ownedHwnd, GWLP_HWNDPARENT, ownerHwnd);
         }
 
     }

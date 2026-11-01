@@ -16,6 +16,7 @@ namespace XrayUI.ViewModels
     {
         private readonly IDialogService _dialogs;
         private readonly SettingsService _settings;
+        private readonly JumpListService _jumpList = new();
         private readonly StartupService _startupService;
         private readonly IUpdateService _updateService;
         private readonly DispatcherQueue? _uiDispatcher;
@@ -60,6 +61,7 @@ namespace XrayUI.ViewModels
             (ControlPanel.IsRunning ? _activeServer : ServerList.SelectedServer)?.Name ?? L.Main_NoSelection;
 
         public ServerEntry? ActiveServer => _activeServer;
+        public ServerEntry? DisplayedServer => ControlPanel.IsRunning ? _activeServer : ServerList.SelectedServer;
 
         // Tray icon tooltip. Uses (IsRunning || IsReapplying) so it stays in the "running"
         // form across a node switch — IsReapplying brackets the stop→start gap (the same
@@ -117,7 +119,10 @@ namespace XrayUI.ViewModels
             ServerList   = new ServerListViewModel(dialogs, settings, latencyProbe, realLatencyProbe);
             ServerDetail = new ServerDetailViewModel(latencyProbe, aiUnlockCheck);
             ControlPanel = new ControlPanelViewModel(dialogs, settings, xray, tunService, startupService, updateService);
-            Personalize  = new PersonalizeViewModel(dialogs, settings);
+            Personalize  = new PersonalizeViewModel(dialogs, settings)
+            {
+                IsProxyRunning = () => ControlPanel.IsRunning || ControlPanel.IsReapplying,
+            };
             AppSettings  = new AppSettingsViewModel(settings, startupService, dialogs, updateService, xray);
 
             // Wire ControlPanel so it knows the current selected server
@@ -125,6 +130,7 @@ namespace XrayUI.ViewModels
             ControlPanel.GetAllServers = () => ServerList.Servers;
             ControlPanel.CanStartSelectedServer = () => ServerList.CanRunSelectedServer;
             ServerDetail.GetAllServers = () => ServerList.Servers;
+            ServerDetail.GetActiveLocalProxyPort = () => ControlPanel.ActiveLocalProxyPort;
             ServerDetail.RequestSwitchToNextGeminiServer = SwitchToNextGeminiServerAsync;
             ServerDetail.ResolveGroupName = ServerList.GetGroupDisplayName;
             ServerDetail.OpenSubscriptions = ServerList.OpenSubscriptionsOnManagePageAsync;
@@ -152,6 +158,7 @@ namespace XrayUI.ViewModels
             ControlPanel.ShowPersonalizeRequested += (_, _) => OpenPersonalize();
             ControlPanel.ExitRequested += (_, _) => ExitRequested?.Invoke(this, EventArgs.Empty);
             Personalize.CloseRequested            += (_, _) => ClosePersonalize();
+            Personalize.PresetImported            += OnPresetImported;
 
             ControlPanel.ShowAppSettingsRequested += (_, _) => OpenAppSettings();
             AppSettings.CloseRequested            += (_, _) => CloseAppSettings();
@@ -163,8 +170,9 @@ namespace XrayUI.ViewModels
 
         // ── Startup initialisation (call after Window is ready) ───────────────
 
-        public async Task InitializeAsync(bool isBootLaunch = false)
+        public async Task InitializeAsync(LaunchKind launchKind)
         {
+            var isBootLaunch = launchKind == LaunchKind.Boot;
             await FirstRunWizardService.RunWizardIfNeededAsync(_dialogs, _settings);
             await new InitialImportService(_settings).ImportAsync();
 
@@ -184,6 +192,8 @@ namespace XrayUI.ViewModels
             ControlPanel.AllowLanConnections   = s.AllowLanConnections;
             ControlPanel.RoutingMode           = s.RoutingMode;
             ControlPanel.IsSystemProxyEnabled  = s.IsSystemProxyEnabled;
+            // Gates the gear items a config profile owns, and the "custom" routing label.
+            ControlPanel.ApplyConfigProfileState(s.UseTunConfigProfile, s.UseProxyConfigProfile);
             ControlPanel.InitializePersonalize(s);
             Personalize.LoadDisplayOptions(s);
             Personalize.LoadLanguage(s);
@@ -217,7 +227,7 @@ namespace XrayUI.ViewModels
 
             // If RestoreProxyStateOnStartup is enabled, restore the exact running state from last exit.
             // Otherwise, fall back to existing boot launch auto-connect behavior.
-            if (s.RestoreProxyStateOnStartup)
+            if (launchKind != LaunchKind.Other && s.RestoreProxyStateOnStartup)
                 await TryRestoreProxyStateAsync(s);
             else if (isBootLaunch && s.IsAutoConnect)
                 await TryAutoConnectAsync(s);
@@ -415,6 +425,19 @@ namespace XrayUI.ViewModels
             });
         }
 
+        public Task ConnectFromJumpListAsync(JumpListRequest request, bool useDefaultMode) =>
+            ControlPanel.ConnectFromJumpListAsync(request.ServerId, () =>
+            {
+                if (string.IsNullOrEmpty(request.ServerId)) return false;
+                var target = ServerList.Servers.FirstOrDefault(server =>
+                    string.Equals(server.Id, request.ServerId, StringComparison.Ordinal));
+                if (target is null || !ServerList.CanRunServer(target)) return false;
+
+                _geminiAutoSwitchAttempted.Clear();
+                ServerList.SelectedServer = target;
+                return true;
+            }, useDefaultMode);
+
         private async Task TryAutoConnectAsync(AppSettings s)
         {
             var target = (!string.IsNullOrEmpty(s.LastAutoConnectServerId)
@@ -530,6 +553,13 @@ namespace XrayUI.ViewModels
         {
             if (server is null || ControlPanel.IsReapplying) return;
             _geminiAutoSwitchAttempted.Clear();
+
+            if (server.IsDedicatedPortActive)
+            {
+                server.IsDedicatedPortActive = false;
+                await ServerList.SaveAsync();
+            }
+
             ServerList.SelectedServer = server;
             await ControlPanel.ConnectToServerAsync(server);
         }
@@ -746,6 +776,7 @@ namespace XrayUI.ViewModels
             if (e.PropertyName == nameof(ServerListViewModel.SelectedServer))
             {
                 ServerDetail.SelectedServer = ServerList.SelectedServer;
+                OnPropertyChanged(nameof(DisplayedServer));
                 OnPropertyChanged(nameof(ActiveServerName));
                 OnPropertyChanged(nameof(TrayTooltip));
                 ControlPanel.NotifyStartStopStateChanged();
@@ -845,8 +876,9 @@ namespace XrayUI.ViewModels
                 _trafficCollector.StartSession(ControlPanel.XrayService.StatsApiPort);
             else
                 _trafficCollector.StopSession();
-            UpdateActiveServer(isRunning ? ServerList.SelectedServer : null);
+            UpdateActiveServer(isRunning ? ControlPanel.ActiveServer : null);
             ServerList.IsProxyRunning = isRunning;
+            OnPropertyChanged(nameof(DisplayedServer));
             OnPropertyChanged(nameof(ActiveServerName));
             OnPropertyChanged(nameof(TrayTooltip));
             OnPropertyChanged(nameof(MiniIsRunning));
@@ -854,7 +886,7 @@ namespace XrayUI.ViewModels
             OnPropertyChanged(nameof(MiniDotVisibility));
             SwitchToSelectedServerCommand.NotifyCanExecuteChanged();
 
-            ServerDetail.OnProxyRunningChanged(isRunning, ControlPanel.LocalPort);
+            ServerDetail.OnProxyRunningChanged(isRunning);
 
             if (isRunning && !ControlPanel.IsUpdateAvailable)
                 QueueUpdateCheck(CurrentProxyUrl());
@@ -880,7 +912,14 @@ namespace XrayUI.ViewModels
                 _activeLatencyText = server is not null ? ServerDetail.LatencyText : string.Empty;
                 ServerDetail.ActiveServer = server;
                 if (server is not null)
+                {
                     server.IsActive = true;
+                    if (server.IsDedicatedPortActive)
+                    {
+                        server.IsDedicatedPortActive = false;
+                        _ = ServerList.SaveAsync();
+                    }
+                }
                 return;
             }
 
@@ -897,6 +936,11 @@ namespace XrayUI.ViewModels
             {
                 server.IsActive = true;
                 server.RuntimeProxyPort = ControlPanel.LocalPort;
+                if (server.IsDedicatedPortActive)
+                {
+                    server.IsDedicatedPortActive = false;
+                    _ = ServerList.SaveAsync();
+                }
             }
         }
 

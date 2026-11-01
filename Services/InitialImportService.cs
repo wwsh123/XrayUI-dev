@@ -20,6 +20,8 @@ namespace XrayUI.Services
 
         public async Task ImportAsync()
         {
+            var settings = await _settings.LoadSettingsAsync().ConfigureAwait(false);
+            if (settings.SkipInitialImport || settings.IsFailedLoadFallback) return;
             if (!Directory.Exists(PresetPaths.Dir))
                 return;
 

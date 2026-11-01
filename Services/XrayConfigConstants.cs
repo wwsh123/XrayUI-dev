@@ -10,6 +10,10 @@ namespace XrayUI.Services
         // Inbound / outbound / DNS tags
         public const string TunInboundTag    = "tun-in";
         public const string MixedInboundTag  = "mixed-in";
+        public const string ProxyOutboundTag = "proxy";
+        public const string DirectOutboundTag = "direct";
+        public const string BlockOutboundTag = "block";
+        public const string ChainEntryOutboundTag = "chain-entry";
         public const string DnsOutboundTag   = "dns-out";
         public const string FakeDnsServerTag = "fakedns";
 
@@ -19,7 +23,7 @@ namespace XrayUI.Services
 
         // TUN adapter: the inbound name in the xray config must match the Windows
         // interface alias used by TunService for adapter operations (DNS reset, route delete).
-        public const string TunInterfaceName        = "xray-tun-portable";
+        public const string TunInterfaceName        = "xray-tun";
         public const string TunOutboundInterfaceAuto = "auto";
 
         // TUN adapter addressing. xray assigns these to the xray-tun adapter and, via

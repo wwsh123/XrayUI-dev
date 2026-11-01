@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -7,6 +8,7 @@ using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
 using XrayUI.Helpers;
+using XrayUI.Models;
 using XrayUI.Services;
 namespace XrayUI
 {
@@ -15,12 +17,16 @@ namespace XrayUI
         private const string SingleInstanceKey = "XrayUI.Portable.MainInstance";
         private const string ParentPidArgumentPrefix = "--parent-pid=";
         private const string TunArgument = "--tun";
+        private const string JumpElevatedForwardArgument = "--jump-elevated-forward";
         private const uint ShutdownNoRetry = 0x00000001;
         private const uint ShutdownLevel = 0x280;
         private Window? _window;
         private AppInstance? _mainInstance;
         private bool _cleanupStarted;
         private volatile bool _pendingExternalActivation;
+        private readonly ConcurrentQueue<(JumpListRequest Request, bool UseDefaultMode)> _pendingConnections = new();
+        private bool _processingConnections;
+        private Task<bool> _takeover = Task.FromResult(true);
 
         public Window? Window => _window;
 
@@ -63,18 +69,24 @@ namespace XrayUI
         protected override async void OnLaunched(LaunchActivatedEventArgs args)
         {
             var cmdArgs = Environment.GetCommandLineArgs();
+            var jumpRequest = JumpListRequest.Parse(cmdArgs);
             var parentPid = TryGetParentProcessId(cmdArgs);
-            var startMinimized = cmdArgs.Contains(StartupService.StartupMinimizedArgument, StringComparer.OrdinalIgnoreCase);
+            var startMinimized = jumpRequest is null && cmdArgs.Contains(StartupService.StartupMinimizedArgument, StringComparer.OrdinalIgnoreCase);
             var isTunLaunch = cmdArgs.Contains(TunArgument, StringComparer.OrdinalIgnoreCase);
             var isTunTakeover = isTunLaunch && parentPid.HasValue;
+            var launchKind = startMinimized ? LaunchKind.Boot
+                : jumpRequest is null && !isTunLaunch && !parentPid.HasValue ? LaunchKind.ManualOpen
+                : LaunchKind.Other;
 
-            if (!isTunTakeover && await TryRedirectToExistingInstanceAsync(startMinimized))
+            if (!isTunTakeover && await TryRedirectToExistingInstanceAsync(startMinimized, jumpRequest))
             {
                 return;
             }
 
-            _window = new MainWindow(startMinimized);
+            _window = new MainWindow(launchKind);
             _window.Closed += (_, _) => CleanupOnExit();
+            if (jumpRequest is not null)
+                _pendingConnections.Enqueue((jumpRequest, !isTunLaunch));
 
             // Check for --tun: after restarting as administrator, enable TUN mode automatically.
             if (isTunLaunch)
@@ -93,6 +105,11 @@ namespace XrayUI
                 _window.AppWindow.Move(new Windows.Graphics.PointInt32(-32000, -32000));
             }
 
+            if (parentPid.HasValue)
+            {
+                _takeover = TakeOverPreviousInstanceAsync(parentPid.Value, isTunTakeover);
+            }
+
             _window.Activate();
 
             if (startMinimized)
@@ -101,16 +118,12 @@ namespace XrayUI
                 _window.AppWindow.Hide();
             }
 
-            if (parentPid.HasValue)
-            {
-                _ = TakeOverPreviousInstanceAsync(parentPid.Value, isTunTakeover);
-            }
-
             if (_pendingExternalActivation && _window is MainWindow mainWindow)
             {
                 _pendingExternalActivation = false;
                 mainWindow.RestoreFromTray();
             }
+            _ = ProcessPendingConnectionsAsync();
         }
 
         public void RequestShutdown(bool fastShutdown = false)
@@ -172,11 +185,25 @@ namespace XrayUI
 
             _cleanupStarted = true;
 
-            SystemProxyService.ClearProxy();
+            ProxyOwnershipService.ClearProxy();
 
             if (_window is MainWindow mainWindow)
             {
                 mainWindow.StopBackgroundServicesOnExit(fastShutdown);
+            }
+        }
+
+        private static void DeleteConfigPreview()
+        {
+            try
+            {
+                // File.Delete is a no-op when no preview has been generated. Keep cleanup
+                // best-effort so a JSON editor temporarily locking the file cannot block exit.
+                File.Delete(AppPaths.XrayConfigPreviewPath);
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[Shutdown] Failed to delete config preview: {ex.Message}");
             }
         }
 
@@ -214,7 +241,7 @@ namespace XrayUI
             return null;
         }
 
-        private async Task<bool> TryRedirectToExistingInstanceAsync(bool startMinimized)
+        private async Task<bool> TryRedirectToExistingInstanceAsync(bool startMinimized, JumpListRequest? jumpRequest)
         {
             AppInstance mainInstance;
             try
@@ -224,7 +251,10 @@ namespace XrayUI
             catch (Exception ex)
             {
                 Debug.WriteLine($"[SingleInstance] Failed to register app instance: {ex}");
-                return false;
+                if (jumpRequest is null) return false;
+                HandleJumpListRedirectFailure(jumpRequest, ex);
+                ExitDuplicateInstance();
+                return true;
             }
 
             if (mainInstance.IsCurrent)
@@ -245,16 +275,52 @@ namespace XrayUI
                     else
                     {
                         Debug.WriteLine("[SingleInstance] Activation args were null; exiting duplicate instance without redirect.");
+                        HandleJumpListRedirectFailure(jumpRequest, error: null);
                     }
                 }
                 catch (Exception ex)
                 {
                     Debug.WriteLine($"[SingleInstance] Failed to redirect activation: {ex}");
+                    HandleJumpListRedirectFailure(jumpRequest, ex);
                 }
             }
 
             ExitDuplicateInstance();
             return true;
+        }
+
+        /// <summary>A jump-list click that cannot reach the running instance must not become a
+        /// second connection owner: relay it elevated once, or tell the user. No-op for other launches.</summary>
+        private static void HandleJumpListRedirectFailure(JumpListRequest? request, Exception? error)
+        {
+            if (request is null) return;
+
+            if (error?.HResult == unchecked((int)0x80070005) && !AdminHelper.IsAdministrator()
+                && !Environment.GetCommandLineArgs().Contains(JumpElevatedForwardArgument, StringComparer.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    // The existing TUN instance may own AppLifecycle's objects at high integrity.
+                    // Relay only our node ID, once, through Windows' normal UAC path.
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = Environment.ProcessPath!,
+                        Arguments = request.ToArguments() + " " + JumpElevatedForwardArgument,
+                        WorkingDirectory = AppContext.BaseDirectory,
+                        UseShellExecute = true,
+                        Verb = "runas",
+                    });
+                    return;
+                }
+                catch (System.ComponentModel.Win32Exception ex) when (ex.NativeErrorCode == 1223)
+                {
+                    return; // UAC cancellation leaves the existing connection untouched.
+                }
+                catch (Exception ex) { Debug.WriteLine($"[JumpList] Elevated relay failed: {ex}"); }
+            }
+
+            // No XAML window exists in this short-lived relay. Do not create a second connection owner.
+            MessageBoxW(0, L.JumpList_ActivationFailed, L.JumpList_Title, 0x10);
         }
 
         private bool RegisterCurrentAsMainInstance(AppInstance? appInstance = null)
@@ -298,6 +364,15 @@ namespace XrayUI
 
         private void OnAppInstanceActivated(object? sender, AppActivationArguments args)
         {
+            // Redirected activations carry their own arguments, not this process's original command line.
+            var arguments = args.Data switch
+            {
+                Windows.ApplicationModel.Activation.ILaunchActivatedEventArgs launch => launch.Arguments,
+                Windows.ApplicationModel.Activation.ICommandLineActivatedEventArgs command => command.Operation.Arguments,
+                _ => string.Empty,
+            };
+            if (JumpListRequest.Parse(CommandLineArguments.Split(arguments)) is { } request)
+                _pendingConnections.Enqueue((request, false));
             var window = _window;
             if (window is not null && window.DispatcherQueue.TryEnqueue(RestoreOrDeferActivation))
             {
@@ -312,11 +387,40 @@ namespace XrayUI
             if (_window is MainWindow mainWindow)
             {
                 mainWindow.RestoreFromTray();
+                _ = ProcessPendingConnectionsAsync();
             }
             else
             {
                 _pendingExternalActivation = true;
             }
+        }
+
+        private async Task ProcessPendingConnectionsAsync()
+        {
+            if (_processingConnections || _window is not MainWindow mainWindow) return;
+            _processingConnections = true;
+            try
+            {
+                await mainWindow.Initialization;
+                // The outgoing non-elevated process must finish proxy/route cleanup first.
+                if (!await _takeover)
+                {
+                    _pendingConnections.Clear();
+                    await mainWindow.ViewModel.Personalize.Dialogs.ShowErrorAsync(
+                        L.JumpList_Title, L.JumpList_ActivationFailed);
+                    return;
+                }
+                while (!_cleanupStarted && _pendingConnections.TryDequeue(out var pending))
+                {
+                    mainWindow.ShowFullWindow();
+                    await mainWindow.ViewModel.ConnectFromJumpListAsync(pending.Request, pending.UseDefaultMode);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"[JumpList] Activation failed: {ex}");
+            }
+            finally { _processingConnections = false; }
         }
 
         private static void ExitDuplicateInstance()
@@ -332,14 +436,16 @@ namespace XrayUI
             }
         }
 
-        private async Task TakeOverPreviousInstanceAsync(int parentPid, bool registerSingleInstanceAfterTakeover)
+        /// <returns>True once the previous instance has exited and, when asked, this instance
+        /// owns the single-instance key.</returns>
+        private async Task<bool> TakeOverPreviousInstanceAsync(int parentPid, bool registerSingleInstanceAfterTakeover)
         {
             var previousInstanceExited = false;
             try
             {
                 if (parentPid <= 0 || parentPid == Environment.ProcessId)
                 {
-                    return;
+                    return false;
                 }
 
                 await Task.Delay(150);
@@ -405,10 +511,16 @@ namespace XrayUI
                     mainWindow.RegisterGlobalHotkeysAfterProcessTakeover();
                 }
             }
+
+            return previousInstanceExited
+                && (!registerSingleInstanceAfterTakeover || _mainInstance is not null);
         }
 
         [DllImport("kernel32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool SetProcessShutdownParameters(uint dwLevel, uint dwFlags);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+        private static extern int MessageBoxW(nint hwnd, string text, string caption, uint type);
     }
 }

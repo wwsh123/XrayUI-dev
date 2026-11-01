@@ -1,10 +1,11 @@
-﻿using System;
+using System;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
 
 namespace XrayUI.Services
 {
     // Sets and clears the Windows system proxy (WinInet / IE proxy, honored by browsers and most apps).
+    // Proxy environment variables belong to the user and are never changed here.
     public static class SystemProxyService
     {
         private const string RegPath =
@@ -28,6 +29,7 @@ namespace XrayUI.Services
                              ?? throw new InvalidOperationException("无法打开注册表项：" + RegPath);
 
                 key.SetValue("ProxyEnable", 1, RegistryValueKind.DWord);
+                // Plain host:port — the canonical WinInet format read by Chrome, Edge, curl for Windows.
                 key.SetValue("ProxyServer", $"{host}:{port}", RegistryValueKind.String);
                 // Bypass proxy for local addresses.
                 key.SetValue("ProxyOverride",
@@ -41,7 +43,7 @@ namespace XrayUI.Services
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[SystemProxy] SetProxy 失败: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[SystemProxy] SetProxy(WinInet) 失败: {ex.Message}");
             }
         }
 
@@ -51,17 +53,19 @@ namespace XrayUI.Services
             try
             {
                 using var key = Registry.CurrentUser.OpenSubKey(RegPath, writable: true);
-                if (key == null) return;
-
-                key.SetValue("ProxyEnable", 0, RegistryValueKind.DWord);
-                key.DeleteValue("ProxyServer", throwOnMissingValue: false);
-                key.Flush();
-                NotifyWindows();
+                if (key != null)
+                {
+                    key.SetValue("ProxyEnable", 0, RegistryValueKind.DWord);
+                    key.DeleteValue("ProxyServer", throwOnMissingValue: false);
+                    key.Flush();
+                    NotifyWindows();
+                }
             }
             catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine($"[SystemProxy] ClearProxy 失败: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"[SystemProxy] ClearProxy(WinInet) 失败: {ex.Message}");
             }
+
         }
 
         // ── Helpers ───────────────────────────────────────────────────────────
